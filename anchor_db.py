@@ -360,6 +360,16 @@ class AnchorDB:
             conn.execute("UPDATE memories SET tier = ? WHERE memory_id = ?", (tier, memory_id))
             conn.commit()
 
+    def promote_by_citation(self, threshold: int = 7) -> int:
+        """Auto-promote heavily cited memories to core (permanent)."""
+        with self._conn() as conn:
+            cursor = conn.execute(
+                "UPDATE memories SET tier = 'core' WHERE usage_count >= ? AND tier != 'core'",
+                (threshold,),
+            )
+            conn.commit()
+        return cursor.rowcount
+
     def decay_short(self, days: int = 14) -> int:
         """Delete short-tier memories older than N days."""
         cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()

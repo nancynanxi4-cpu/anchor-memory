@@ -499,12 +499,15 @@ class AnchorMemory:
             except Exception:
                 results["auto_discovered"] = 0
 
-        # 5. Equilibrate emotion scores
+        # 5. Promote heavily cited memories to core
+        results["promoted_to_core"] = self.db.promote_by_citation(threshold=7)
+
+        # 6. Equilibrate emotion scores
         results["emotion_equalized"] = self.db.equalize_emotion_scores(
             nudge=emotion_nudge, threshold=0.2
         )
 
-        # 6. Split bundled memories (if LLM available)
+        # 7. Split bundled memories (if LLM available)
         try:
             split_count = self.split_bundled(batch_size=50, dry_run=False)
             results["split_memories"] = split_count
