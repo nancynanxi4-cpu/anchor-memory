@@ -214,6 +214,13 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
 let currentPage = 1;
 let searchTimer = null;
 
+function fmtTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + (iso.endsWith('Z') || iso.includes('+') ? '' : 'Z'));
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+}
+
 function toast(msg, type='success') {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -303,7 +310,7 @@ async function loadMemories() {
   data.items.forEach(m => {
     const tr = document.createElement('tr');
     const emotionPct = Math.round((m.emotion_score || 0) * 100);
-    const ts = m.timestamp ? m.timestamp.slice(0, 16).replace('T', ' ') : '';
+    const ts = fmtTime(m.timestamp);
     const pinClass = m.pinned ? 'active' : '';
     const annClass = m.has_annotation ? 'has' : '';
     const comClass = m.has_comment ? 'has' : '';
@@ -377,7 +384,7 @@ async function openDetail(mid) {
   let html = `
     <div class="detail-header">
       <div class="mid">${escHtml(m.memory_id)}</div>
-      <div class="timestamp">${m.timestamp || ''}</div>
+      <div class="timestamp">${fmtTime(m.timestamp)}</div>
     </div>
 
     <div class="section">
@@ -432,7 +439,7 @@ async function openDetail(mid) {
       <div id="neighbors-list">
         ${data.neighbors.map(nb => `
           <div class="neighbor-item">
-            <span class="nb-text" title="${escHtml(nb.text)}">${escHtml(nb.memory_id)} — ${escHtml(nb.text)}</span>
+            <span class="nb-text" style="cursor:pointer;color:var(--accent)" onclick="openDetail('${nb.memory_id}')" title="${escHtml(nb.text)}">${escHtml(nb.memory_id)} — ${escHtml(nb.text)}</span>
             <span class="nb-weight">${nb.weight.toFixed(2)}</span>
             <button class="btn-danger btn-sm" onclick="removeEdge('${mid}','${nb.memory_id}')">删边</button>
           </div>
@@ -447,7 +454,7 @@ async function openDetail(mid) {
         ${data.annotations.map(a => `
           <div class="annotation-item">
             <div>${escHtml(a.text)}</div>
-            <div class="a-time">${a.created_at || ''}</div>
+            <div class="a-time">${fmtTime(a.created_at)}</div>
           </div>
         `).join('')}
         ${data.annotations.length === 0 ? '<div style="color:var(--text2);font-size:13px">无注解</div>' : ''}
@@ -463,7 +470,7 @@ async function openDetail(mid) {
       <div id="comments-list">
         ${data.comments.map(c => `
           <div class="comment-item">
-            <div class="c-meta"><span class="c-author">${escHtml(c.author)}</span> · ${c.created_at || ''}</div>
+            <div class="c-meta"><span class="c-author">${escHtml(c.author)}</span> · ${fmtTime(c.created_at)}</div>
             <div>${escHtml(c.content)}</div>
           </div>
         `).join('')}
@@ -529,6 +536,7 @@ async function addEdge(mid) {
 }
 
 async function removeEdge(sourceId, targetId) {
+  if (!confirm('确认删除此边？')) return;
   await api('/api/edges', { method: 'DELETE', body: { source_id: sourceId, target_id: targetId } });
   toast('边已删除');
   openDetail(sourceId);

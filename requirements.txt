@@ -2,6 +2,7 @@ chromadb>=0.4.0
 sentence-transformers>=2.2.0
 mcp[cli]>=1.0.0
 flask>=3.0.0
+pyyaml>=6.0
 
 # Optional — Chinese keyword tokenization for keyword_search.
 # Without jieba, multi-character Chinese phrases won't tokenize properly

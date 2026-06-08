@@ -467,7 +467,7 @@ class AnchorMemory:
         results = {}
 
         # 1. Mark internalized (stale but emotionally significant)
-        results["internalized"] = self.db.mark_internalized(idle_days=30, emotion_threshold=0.6)
+        results["newly_internalized"] = self.db.mark_internalized(idle_days=30, emotion_threshold=0.6)
 
         # 2. Decay short-tier memories (skips internalized)
         results["decayed_memories"] = self.db.decay_short(days=short_decay_days)
@@ -503,7 +503,7 @@ class AnchorMemory:
                 results["auto_discovered"] = 0
 
         # 6. Promote heavily cited memories to core
-        results["promoted_to_core"] = self.db.promote_by_citation(threshold=7)
+        results["citation_upgraded"] = self.db.promote_by_citation(threshold=7)
 
         # 7. Equilibrate emotion scores
         results["emotion_equalized"] = self.db.equalize_emotion_scores(

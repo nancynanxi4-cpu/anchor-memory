@@ -19,6 +19,9 @@ import sys
 import os
 import uuid
 import argparse
+import threading
+import time
+import logging
 
 if sys.platform == "win32" or (hasattr(sys.stdout, 'buffer') and sys.stdout.encoding and sys.stdout.encoding.upper() != 'UTF-8'):
     import io
@@ -301,6 +304,17 @@ def create_mcp_server(
     return mcp
 
 
+def _dream_loop(mem, interval_hours: int = 24):
+    log = logging.getLogger("anchor_dream")
+    while True:
+        time.sleep(interval_hours * 3600)
+        try:
+            stats = mem.dream_pass()
+            log.info("auto dream_pass: %s", stats)
+        except Exception as e:
+            log.error("auto dream_pass failed: %s", e)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Anchor Memory MCP Server")
     parser.add_argument("--db-path", default="./anchor_data", help="Path to store memory data")
@@ -311,18 +325,23 @@ if __name__ == "__main__":
         help="Transport mode (default: stdio)",
     )
     parser.add_argument("--host", default="127.0.0.1", help="Host for streamable-http (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=3333, help="Port for streamable-http (default: 3333)")
+    parser.add_argument("--port", type=int, default=8000, help="Port for streamable-http (default: 8000)")
     parser.add_argument("--auth-token", default=None, help="Bearer token (env: ANCHOR_API_KEY)")
     args = parser.parse_args()
 
     transport = args.transport if args.transport != "stdio" else os.environ.get("ANCHOR_TRANSPORT", "stdio")
     host = args.host if args.host != "127.0.0.1" else os.environ.get("ANCHOR_HOST", "127.0.0.1")
-    port = args.port if args.port != 3333 else int(os.environ.get("ANCHOR_PORT", "3333"))
+    port = args.port if args.port != 8000 else int(os.environ.get("ANCHOR_PORT", "8000"))
     auth_token = args.auth_token or os.environ.get("ANCHOR_API_KEY")
 
     os.makedirs(args.db_path, exist_ok=True)
     mem = AnchorMemory(db_path=args.db_path)
 
     mcp = create_mcp_server(mem, host=host, port=port, auth_token=auth_token)
+
+    if transport == "streamable-http":
+        t = threading.Thread(target=_dream_loop, args=(mem,), daemon=True)
+        t.start()
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
 
     mcp.run(transport=transport)

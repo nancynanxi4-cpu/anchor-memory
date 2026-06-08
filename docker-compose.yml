@@ -1,30 +1,16 @@
 services:
-  anchor-web:
+  anchor:
     build: .
-    container_name: anchor-web
+    container_name: anchor
     ports:
-      - "5000:5000"
+      - "8000:8000"
     volumes:
-      - anchor_data:/data
+      - anchor_data:/app/anchor_data
     environment:
-      - ANCHOR_WEB_PASSWORD=${ANCHOR_WEB_PASSWORD:-anchor}
-      - ANCHOR_MODE=web
-      - ANCHOR_LLM=${ANCHOR_LLM:-}
-      - ANCHOR_LLM_API_KEY=${ANCHOR_LLM_API_KEY:-}
-      - ANCHOR_LLM_ENDPOINT=${ANCHOR_LLM_ENDPOINT:-}
-    restart: unless-stopped
-    mem_limit: 1g
-
-  anchor-mcp:
-    build: .
-    container_name: anchor-mcp
-    ports:
-      - "3333:3333"
-    volumes:
-      - anchor_data:/data
-    environment:
-      - ANCHOR_MODE=mcp
       - ANCHOR_API_KEY=${ANCHOR_API_KEY:-}
+      - ANCHOR_DASHBOARD_PASSWORD=${ANCHOR_DASHBOARD_PASSWORD:-}
+      - ANCHOR_TRANSPORT=streamable-http
+      - ANCHOR_PORT=8000
       - ANCHOR_LLM=${ANCHOR_LLM:-}
       - ANCHOR_LLM_API_KEY=${ANCHOR_LLM_API_KEY:-}
       - ANCHOR_LLM_ENDPOINT=${ANCHOR_LLM_ENDPOINT:-}

@@ -3,17 +3,15 @@ Anchor Memory — Web UI
 
 Single-file Flask app for browsing and managing anchor memories.
 Start: python anchor_web.py --db-path ./anchor_data --port 5000
-Password via env: ANCHOR_WEB_PASSWORD (default: 'anchor')
+Password via env: ANCHOR_DASHBOARD_PASSWORD (empty = no password)
 """
 
 import os
 import sys
 import json
 import uuid
-import time
 import logging
 import argparse
-import threading
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -26,26 +24,15 @@ WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 log = logging.getLogger("anchor_web")
 
 
-def _dream_loop(mem, interval_hours: int = 24):
-    """Background thread: run dream_pass every N hours."""
-    while True:
-        time.sleep(interval_hours * 3600)
-        try:
-            stats = mem.dream_pass()
-            log.info("auto dream_pass: %s", stats)
-        except Exception as e:
-            log.error("auto dream_pass failed: %s", e)
-
-
 def create_app(db_path: str, secret_key: str = None) -> Flask:
     os.makedirs(db_path, exist_ok=True)
     mem = AnchorMemory(db_path=db_path)
 
     app = Flask(__name__, static_folder=None)
     app.secret_key = secret_key or os.urandom(24).hex()
-
-    t = threading.Thread(target=_dream_loop, args=(mem,), daemon=True)
-    t.start()
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 
     def login_required(f):
         @wraps(f)
@@ -59,13 +46,19 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
     def index():
         return send_file(os.path.join(WEB_DIR, "index.html"))
 
+    @app.route("/health", methods=["GET"])
+    def health():
+        total = mem.count()
+        return jsonify({"status": "ok", "total_memories": total})
+
     @app.route("/api/login", methods=["POST"])
     def login():
         data = request.get_json(force=True)
         password = data.get("password", "")
-        expected = os.environ.get("ANCHOR_WEB_PASSWORD", "anchor")
-        if password == expected:
+        expected = os.environ.get("ANCHOR_DASHBOARD_PASSWORD", "")
+        if not expected or password == expected:
             session["authenticated"] = True
+            session.permanent = True
             return jsonify({"ok": True})
         return jsonify({"error": "密码错误"}), 403
 
@@ -531,9 +524,9 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true", help="调试模式")
     args = parser.parse_args()
 
-    password = os.environ.get("ANCHOR_WEB_PASSWORD", "anchor")
+    password = os.environ.get("ANCHOR_DASHBOARD_PASSWORD", "")
     print(f"Anchor Memory Web UI — http://{args.host}:{args.port}")
-    print(f"密码: {'(环境变量 ANCHOR_WEB_PASSWORD)' if os.environ.get('ANCHOR_WEB_PASSWORD') else 'anchor (默认)'}")
+    print(f"密码: {'(环境变量 ANCHOR_DASHBOARD_PASSWORD)' if os.environ.get('ANCHOR_DASHBOARD_PASSWORD') else '未设置 (无需密码)'}")
     print(f"Dream Pass: 每 24 小时自动执行")
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")

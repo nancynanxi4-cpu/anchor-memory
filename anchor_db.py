@@ -20,7 +20,7 @@ class AnchorDB:
         self._init_tables()
 
     def _conn(self):
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA foreign_keys = ON")
@@ -372,10 +372,10 @@ class AnchorDB:
             conn.commit()
 
     def promote_by_citation(self, threshold: int = 7) -> int:
-        """Auto-promote heavily cited memories to core (permanent)."""
+        """Auto-promote heavily cited long-tier memories to core (permanent)."""
         with self._conn() as conn:
             cursor = conn.execute(
-                "UPDATE memories SET tier = 'core' WHERE usage_count >= ? AND tier != 'core'",
+                "UPDATE memories SET tier = 'core' WHERE usage_count >= ? AND tier = 'long'",
                 (threshold,),
             )
             conn.commit()
@@ -387,9 +387,9 @@ class AnchorDB:
         self._ensure_internalized_column()
         with self._conn() as conn:
             cursor = conn.execute(
-                "UPDATE memories SET internalized = 1 "
+                "UPDATE memories SET internalized = 1, tier = 'long' "
                 "WHERE (last_used IS NULL OR last_used < ?) "
-                "AND emotion_score >= ? AND internalized = 0",
+                "AND emotion_score >= ? AND tier != 'core' AND internalized = 0",
                 (cutoff, emotion_threshold),
             )
             conn.commit()
