@@ -7,12 +7,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download local embedding model (only used when ANCHOR_EMBEDDING is empty or "local/...")
-# Skip this by setting ANCHOR_EMBEDDING=openai/... at runtime
-ENV SENTENCE_TRANSFORMERS_HOME=/app/models
-
-RUN python -c "from anchor_embedding import LocalEmbedder; LocalEmbedder('paraphrase-multilingual-MiniLM-L12-v2')"
-
 COPY *.py .
 COPY web/ web/
 COPY entrypoint.sh .
