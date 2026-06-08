@@ -129,6 +129,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
       <span class="stats-bar" id="stats-bar"></span>
       <button class="btn-sm btn-ghost" id="btn-consolidate" onclick="runConsolidate()">Auto Consolidate</button>
       <button class="btn-sm btn-ghost" id="btn-dream" onclick="runDreamPass()">Dream Pass</button>
+      <button class="btn-sm btn-ghost" onclick="openSettings()">&#9881; 设置</button>
       <button class="btn-ghost btn-sm" onclick="doLogout()">退出</button>
     </div>
   </header>
@@ -178,6 +179,36 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div id="settings-panel" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px">
+  <h3 style="margin-bottom:12px">LLM 配置</h3>
+  <div class="field-row">
+    <label>Provider</label>
+    <select id="s-provider" class="value" onchange="document.getElementById('s-endpoint').value=''">
+      <option value="anthropic">Anthropic (Claude)</option>
+      <option value="openai">OpenAI (GPT)</option>
+      <option value="google">Google (Gemini)</option>
+      <option value="openai-compat">OpenAI 兼容 (DeepSeek/GLM/Ollama)</option>
+    </select>
+  </div>
+  <div class="field-row">
+    <label>Model</label>
+    <input type="text" id="s-model" class="value" placeholder="如 deepseek-chat, claude-haiku-4-5-20251001">
+  </div>
+  <div class="field-row">
+    <label>API Key</label>
+    <input type="password" id="s-apikey" class="value" placeholder="留空则从环境变量读取">
+  </div>
+  <div class="field-row">
+    <label>Endpoint</label>
+    <input type="text" id="s-endpoint" class="value" placeholder="OpenAI 兼容时必填，如 https://api.deepseek.com/v1">
+  </div>
+  <div style="display:flex;gap:8px;margin-top:12px">
+    <button class="btn btn-sm" onclick="saveLLMConfig()">保存</button>
+    <button class="btn-sm btn-ghost" id="btn-test-llm" onclick="testLLMConfig()">测试连接</button>
+    <button class="btn-sm btn-ghost" onclick="resetLLMConfig()">重置</button>
+  </div>
+</div>
 
 <script>
 let currentPage = 1;
@@ -535,8 +566,57 @@ async function runDreamPass() {
   btn.disabled = false; btn.textContent = 'Dream Pass';
 }
 
+function openSettings() {
+  const panel = document.getElementById('settings-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  if (panel.style.display === 'block') loadLLMConfig();
+}
+
+async function loadLLMConfig() {
+  try {
+    const cfg = await api('/api/llm-config');
+    document.getElementById('s-provider').value = cfg.provider || 'openai-compat';
+    document.getElementById('s-model').value = cfg.model || '';
+    document.getElementById('s-apikey').value = cfg.api_key || '';
+    document.getElementById('s-endpoint').value = cfg.endpoint || '';
+    document.getElementById('s-provider').dispatchEvent(new Event('change'));
+  } catch(e) {}
+}
+
+async function saveLLMConfig() {
+  const data = {
+    provider: document.getElementById('s-provider').value,
+    model: document.getElementById('s-model').value.trim(),
+    api_key: document.getElementById('s-apikey').value.trim(),
+    endpoint: document.getElementById('s-endpoint').value.trim(),
+  };
+  if (!data.model) { toast('Model 不能为空', 'error'); return; }
+  await api('/api/llm-config', { method: 'PUT', body: data });
+  toast('LLM 配置已保存');
+}
+
+async function testLLMConfig() {
+  const btn = document.getElementById('btn-test-llm');
+  btn.disabled = true; btn.textContent = '测试中...';
+  try {
+    const r = await api('/api/llm-config/test', { method: 'POST' });
+    toast(`连接成功: ${r.provider}/${r.model} → "${r.response}"`);
+  } catch(e) {}
+  btn.disabled = false; btn.textContent = '测试连接';
+}
+
+async function resetLLMConfig() {
+  if (!confirm('确认重置 LLM 配置？将恢复使用环境变量或默认配置。')) return;
+  await api('/api/llm-config', { method: 'DELETE' });
+  document.getElementById('s-provider').value = '';
+  document.getElementById('s-model').value = '';
+  document.getElementById('s-apikey').value = '';
+  document.getElementById('s-endpoint').value = '';
+  toast('已重置');
+}
+
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeDetail();
+  if (e.key === 'Escape') { closeDetail(); document.getElementById('settings-panel').style.display = 'none'; }
 });
 
 // Check session on load

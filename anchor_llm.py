@@ -337,7 +337,7 @@ def _parse_env_spec(spec: str) -> tuple[str, str]:
 
 
 def get_default_llm(override: Optional[LLM] = None) -> LLM:
-    """Resolve the LLM to use. See module docstring for resolution order."""
+    """Resolve the LLM to use. Resolution: override > env > file config > Anthropic fallback."""
     if override is not None:
         return override
 

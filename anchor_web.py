@@ -8,6 +8,7 @@ Password via env: ANCHOR_WEB_PASSWORD (default: 'anchor')
 
 import os
 import sys
+import json
 import uuid
 import time
 import logging
@@ -425,6 +426,99 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
         stats = mem.dream_pass()
         log.info("manual dream_pass: %s", stats)
         return jsonify(stats)
+
+    @app.route("/api/llm-config", methods=["GET"])
+    @login_required
+    def get_llm_config():
+        try:
+            import yaml
+        except ImportError:
+            return jsonify({"error": "pyyaml 未安装"}), 500
+        from anchor_llm import CONFIG_PATH
+        cfg = {}
+        if CONFIG_PATH.exists():
+            try:
+                cfg = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
+            except Exception:
+                pass
+        llm_cfg = cfg.get("llm", {})
+        return jsonify({
+            "provider": llm_cfg.get("provider", ""),
+            "model": llm_cfg.get("model", ""),
+            "api_key": llm_cfg.get("api_key", ""),
+            "endpoint": llm_cfg.get("endpoint", ""),
+            "safety": cfg.get("safety", {}),
+        })
+
+    @app.route("/api/llm-config", methods=["PUT"])
+    @login_required
+    def set_llm_config():
+        try:
+            import yaml
+        except ImportError:
+            return jsonify({"error": "pyyaml 未安装"}), 500
+        from anchor_llm import CONFIG_PATH
+        data = request.get_json(force=True)
+        provider = data.get("provider", "").strip()
+        model = data.get("model", "").strip()
+        api_key = data.get("api_key", "").strip()
+        endpoint = data.get("endpoint", "").strip()
+
+        if not provider or not model:
+            return jsonify({"error": "provider 和 model 不能为空"}), 400
+
+        cfg = {}
+        if CONFIG_PATH.exists():
+            try:
+                cfg = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
+            except Exception:
+                pass
+
+        cfg["llm"] = {"provider": provider, "model": model}
+        if api_key:
+            cfg["llm"]["api_key"] = api_key
+        if endpoint:
+            cfg["llm"]["endpoint"] = endpoint
+        if data.get("safety"):
+            cfg["safety"] = data["safety"]
+
+        CONFIG_PATH.parent.mkdir(exist_ok=True)
+        CONFIG_PATH.write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        try:
+            CONFIG_PATH.chmod(0o600)
+        except Exception:
+            pass
+
+        return jsonify({"ok": True})
+
+    @app.route("/api/llm-config/test", methods=["POST"])
+    @login_required
+    def test_llm_config():
+        import json as _json
+        try:
+            from anchor_llm import get_default_llm, ConfigError
+            llm = get_default_llm()
+            resp = llm.call(system="", user="Say OK", max_tokens=10)
+            return jsonify({"ok": True, "provider": llm.provider, "model": llm.model, "response": resp.text[:50]})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.route("/api/llm-config", methods=["DELETE"])
+    @login_required
+    def reset_llm_config():
+        try:
+            import yaml
+        except ImportError:
+            return jsonify({"error": "pyyaml 未安装"}), 500
+        from anchor_llm import CONFIG_PATH
+        if CONFIG_PATH.exists():
+            try:
+                cfg = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
+                cfg.pop("llm", None)
+                CONFIG_PATH.write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True), encoding="utf-8")
+            except Exception:
+                pass
+        return jsonify({"ok": True})
 
     return app
 
