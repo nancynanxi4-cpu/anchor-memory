@@ -1,0 +1,11 @@
+.venv
+venv
+__pycache__
+*.pyc
+.git
+anchor_data
+.env
+.idea
+.vscode
+*.svg
+docs

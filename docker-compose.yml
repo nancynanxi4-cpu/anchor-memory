@@ -1,0 +1,28 @@
+services:
+  anchor-web:
+    build: .
+    container_name: anchor-web
+    ports:
+      - "5000:5000"
+    volumes:
+      - anchor_data:/data
+    environment:
+      - ANCHOR_WEB_PASSWORD=${ANCHOR_WEB_PASSWORD:-anchor}
+      - ANCHOR_MODE=web
+    restart: unless-stopped
+    mem_limit: 1g
+
+  anchor-mcp:
+    build: .
+    container_name: anchor-mcp
+    ports:
+      - "3333:3333"
+    volumes:
+      - anchor_data:/data
+    environment:
+      - ANCHOR_MODE=mcp
+    restart: unless-stopped
+    mem_limit: 1g
+
+volumes:
+  anchor_data:
