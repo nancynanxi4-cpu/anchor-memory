@@ -9,7 +9,10 @@ Password via env: ANCHOR_WEB_PASSWORD (default: 'anchor')
 import os
 import sys
 import uuid
+import time
+import logging
 import argparse
+import threading
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -19,6 +22,18 @@ sys.path.insert(0, os.path.dirname(__file__))
 from anchor_memory import AnchorMemory
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+log = logging.getLogger("anchor_web")
+
+
+def _dream_loop(mem, interval_hours: int = 24):
+    """Background thread: run dream_pass every N hours."""
+    while True:
+        time.sleep(interval_hours * 3600)
+        try:
+            stats = mem.dream_pass()
+            log.info("auto dream_pass: %s", stats)
+        except Exception as e:
+            log.error("auto dream_pass failed: %s", e)
 
 
 def create_app(db_path: str, secret_key: str = None) -> Flask:
@@ -27,6 +42,9 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
 
     app = Flask(__name__, static_folder=None)
     app.secret_key = secret_key or os.urandom(24).hex()
+
+    t = threading.Thread(target=_dream_loop, args=(mem,), daemon=True)
+    t.start()
 
     def login_required(f):
         @wraps(f)
@@ -350,6 +368,9 @@ if __name__ == "__main__":
     password = os.environ.get("ANCHOR_WEB_PASSWORD", "anchor")
     print(f"Anchor Memory Web UI — http://{args.host}:{args.port}")
     print(f"密码: {'(环境变量 ANCHOR_WEB_PASSWORD)' if os.environ.get('ANCHOR_WEB_PASSWORD') else 'anchor (默认)'}")
+    print(f"Dream Pass: 每 24 小时自动执行")
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
 
     app = create_app(args.db_path)
     app.run(host=args.host, port=args.port, debug=args.debug)
