@@ -93,6 +93,7 @@ class AnchorDB:
             conn.commit()
         self._ensure_context_column()
         self._ensure_visual_column()
+        self._ensure_internalized_column()
 
     def _ensure_context_column(self):
         """Add context column if missing. text = search summary, context = full original."""
@@ -110,6 +111,15 @@ class AnchorDB:
                 conn.execute("SELECT visual_embedding FROM memories LIMIT 1")
             except sqlite3.OperationalError:
                 conn.execute("ALTER TABLE memories ADD COLUMN visual_embedding TEXT DEFAULT ''")
+                conn.commit()
+
+    def _ensure_internalized_column(self):
+        """Add internalized column if missing. Marks emotionally significant stale memories."""
+        with self._conn() as conn:
+            try:
+                conn.execute("SELECT internalized FROM memories LIMIT 1")
+            except sqlite3.OperationalError:
+                conn.execute("ALTER TABLE memories ADD COLUMN internalized INTEGER DEFAULT 0")
                 conn.commit()
 
     # ── Event Log (immutable) ──
@@ -370,12 +380,28 @@ class AnchorDB:
             conn.commit()
         return cursor.rowcount
 
-    def decay_short(self, days: int = 14) -> int:
-        """Delete short-tier memories older than N days."""
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    def mark_internalized(self, idle_days: int = 30, emotion_threshold: float = 0.6) -> int:
+        """Mark stale but emotionally significant memories as internalized (not deleted)."""
+        cutoff = (datetime.utcnow() - timedelta(days=idle_days)).isoformat()
+        self._ensure_internalized_column()
         with self._conn() as conn:
             cursor = conn.execute(
-                "DELETE FROM memories WHERE tier = 'short' AND timestamp < ?",
+                "UPDATE memories SET internalized = 1 "
+                "WHERE (last_used IS NULL OR last_used < ?) "
+                "AND emotion_score >= ? AND internalized = 0",
+                (cutoff, emotion_threshold),
+            )
+            conn.commit()
+        return cursor.rowcount
+
+    def decay_short(self, days: int = 14) -> int:
+        """Delete short-tier memories older than N days. Skips internalized."""
+        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        self._ensure_internalized_column()
+        with self._conn() as conn:
+            cursor = conn.execute(
+                "DELETE FROM memories WHERE tier = 'short' AND timestamp < ? "
+                "AND (internalized IS NULL OR internalized = 0)",
                 (cutoff,)
             )
             conn.commit()

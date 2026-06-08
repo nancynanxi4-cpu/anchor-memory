@@ -466,22 +466,25 @@ class AnchorMemory:
         """
         results = {}
 
-        # 1. Decay short-tier memories
+        # 1. Mark internalized (stale but emotionally significant)
+        results["internalized"] = self.db.mark_internalized(idle_days=30, emotion_threshold=0.6)
+
+        # 2. Decay short-tier memories (skips internalized)
         results["decayed_memories"] = self.db.decay_short(days=short_decay_days)
         if results["decayed_memories"]:
             self.reload()
 
-        # 2. Prune weak edges
+        # 3. Prune weak edges
         results["pruned_edges"] = self.db.decay_edges(
             min_weight=0.1, decay_factor=edge_decay_factor
         )
 
-        # 3. Decay strong manual edges
+        # 4. Decay strong manual edges
         results["decayed_strong"] = self.db.decay_strong_edges(
             min_weight=1.5, decay_factor=strong_edge_decay_factor
         )
 
-        # 4. Auto-discover new connections
+        # 5. Auto-discover new connections
         if auto_discover:
             import random
             try:
@@ -499,15 +502,15 @@ class AnchorMemory:
             except Exception:
                 results["auto_discovered"] = 0
 
-        # 5. Promote heavily cited memories to core
+        # 6. Promote heavily cited memories to core
         results["promoted_to_core"] = self.db.promote_by_citation(threshold=7)
 
-        # 6. Equilibrate emotion scores
+        # 7. Equilibrate emotion scores
         results["emotion_equalized"] = self.db.equalize_emotion_scores(
             nudge=emotion_nudge, threshold=0.2
         )
 
-        # 7. Split bundled memories (if LLM available)
+        # 8. Split bundled memories (if LLM available)
         try:
             split_count = self.split_bundled(batch_size=50, dry_run=False)
             results["split_memories"] = split_count

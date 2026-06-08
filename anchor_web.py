@@ -91,7 +91,7 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
         offset = (page - 1) * per_page
         rows = conn.execute(
             f"SELECT memory_id, text, timestamp, tag, tier, pinned, emotion_score, "
-            f"usage_count, last_used FROM memories{where_sql} "
+            f"usage_count, last_used, internalized FROM memories{where_sql} "
             f"ORDER BY pinned DESC, {sort_col} {sort_dir} LIMIT ? OFFSET ?",
             params + [per_page, offset],
         ).fetchall()
@@ -133,6 +133,7 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
                 "has_comment": com_counts.get(r["memory_id"], 0) > 0,
                 "annotation_count": ann_counts.get(r["memory_id"], 0),
                 "comment_count": com_counts.get(r["memory_id"], 0),
+                "internalized": bool(r["internalized"] or 0),
             })
 
         tags_rows = mem.db._conn().execute("SELECT DISTINCT tag FROM memories ORDER BY tag").fetchall()

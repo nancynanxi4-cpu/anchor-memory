@@ -280,6 +280,7 @@ async function loadMemories() {
         <span class="${pinClass}" title="${m.pinned ? '取消固定' : '固定'}" onclick="togglePin(event,'${m.memory_id}',${m.pinned})">${m.pinned ? '\u{1F4CC}' : '\u{1F516}'}</span>
         <span class="${annClass}" title="${m.annotation_count || 0} 条注解">${m.has_annotation ? '\u{1F4DD}' : ''}</span>
         <span class="${comClass}" title="${m.comment_count || 0} 条评论">${m.has_comment ? '\u{1F4AC}' : ''}</span>
+        ${m.internalized ? '<span class="has" title="已内化">\u{1F9E0}</span>' : ''}
       </td>
       <td><span class="tier-badge tier-${m.tier}">${m.tier}</span></td>
       <td><span class="tag-badge">${m.tag}</span></td>
