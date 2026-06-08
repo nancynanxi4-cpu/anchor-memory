@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anchor Memory</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0f1117;--surface:#1a1d27;--surface2:#242834;--border:#2e3344;--text:#e0e0e8;--text2:#9095a8;--accent:#6c8cff;--accent2:#4a6aef;--danger:#ff5c5c;--success:#4caf50;--warn:#ffb74d;--radius:8px;--shadow:0 2px 12px rgba(0,0,0,.3)}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+button{cursor:pointer;font-family:inherit;font-size:13px;border:none;border-radius:var(--radius);padding:6px 14px;transition:all .15s}
+input,select,textarea{font-family:inherit;font-size:13px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;outline:none;transition:border .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:60px}
+
+.btn{background:var(--accent);color:#fff}
+.btn:hover{background:var(--accent2)}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-danger:hover{background:#e04848}
+
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh}
+.login-box{background:var(--surface);padding:40px;border-radius:12px;box-shadow:var(--shadow);width:340px;text-align:center}
+.login-box h1{font-size:20px;margin-bottom:6px}
+.login-box p{color:var(--text2);font-size:13px;margin-bottom:20px}
+.login-box input{width:100%;margin-bottom:12px;padding:10px 14px}
+.login-box button{width:100%;padding:10px}
+
+#app{display:none;max-width:1200px;margin:0 auto;padding:20px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+header h1{font-size:18px;font-weight:600}
+header .right{display:flex;gap:10px;align-items:center}
+
+.stats-bar{display:flex;gap:16px;margin-bottom:16px;font-size:13px;color:var(--text2)}
+.stats-bar span b{color:var(--text);font-weight:600}
+
+.filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.filters select,input{min-width:100px}
+.filters .search{flex:1;min-width:180px}
+.filters input[type=text]{width:100%}
+
+.mem-table{width:100%;border-collapse:collapse;font-size:13px}
+.mem-table th{text-align:left;padding:8px 10px;color:var(--text2);font-weight:500;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap}
+.mem-table th:hover{color:var(--text)}
+.mem-table th .sort-arrow{margin-left:4px;font-size:10px}
+.mem-table td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+.mem-table tr:hover{background:var(--surface2)}
+.mem-table .icons{white-space:nowrap;font-size:15px}
+.mem-table .icons span{margin-right:6px;cursor:pointer;opacity:.5}
+.mem-table .icons span.active{opacity:1}
+.mem-table .icons span.has{opacity:1;color:var(--warn)}
+.mem-table .text-cell{max-width:500px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.mem-table .text-cell:hover{color:var(--accent)}
+.mem-table .tag-badge,.mem-table .tier-badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;margin-right:4px}
+.tag-badge{background:#1e3a5f;color:#6cb4ee}
+.tier-core{background:#3a1e5f;color:#b480ee}
+.tier-long{background:#1e3f2f;color:#6ce0a0}
+.tier-short{background:#3f351e;color:#eeb86c}
+.mem-table .emotion-bar{width:60px;height:6px;background:var(--border);border-radius:3px;display:inline-block;vertical-align:middle;margin-right:4px}
+.mem-table .emotion-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--danger))}
+.mem-table .meta{color:var(--text2);font-size:12px}
+
+.pagination{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:16px;font-size:13px;color:var(--text2)}
+.pagination button{padding:4px 12px}
+.pagination .current{color:var(--accent);font-weight:600}
+
+#detail-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:100}
+#detail-panel{position:fixed;top:0;right:0;width:560px;max-width:90vw;height:100vh;background:var(--surface);box-shadow:-4px 0 24px rgba(0,0,0,.4);z-index:101;overflow-y:auto;padding:24px;transform:translateX(100%);transition:transform .25s ease}
+#detail-panel.open{transform:translateX(0)}
+#detail-panel .close-btn{position:absolute;top:16px;right:16px;background:none;color:var(--text2);font-size:20px}
+#detail-panel .close-btn:hover{color:var(--text)}
+.detail-header{margin-bottom:16px}
+.detail-header .mid{font-size:12px;color:var(--text2);font-family:monospace}
+.detail-header .timestamp{font-size:12px;color:var(--text2)}
+.section{margin-bottom:20px}
+.section h3{font-size:14px;color:var(--text2);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+
+.field-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.field-row label{min-width:80px;color:var(--text2);font-size:13px}
+.field-row .value{flex:1}
+
+textarea.edit-text{width:100%;min-height:80px;margin-bottom:6px;font-size:13px;line-height:1.5}
+
+input[type=range]{-webkit-appearance:none;width:100%;height:6px;background:var(--border);border-radius:3px;outline:none;border:none;padding:0}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer}
+
+.neighbor-item,.comment-item,.annotation-item{background:var(--surface2);padding:10px 12px;border-radius:var(--radius);margin-bottom:6px;font-size:13px}
+.neighbor-item{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.neighbor-item .nb-text{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.neighbor-item .nb-weight{color:var(--accent);font-weight:600;min-width:40px;text-align:right}
+.comment-item .c-meta{font-size:11px;color:var(--text2);margin-bottom:4px}
+.comment-item .c-author{color:var(--warn);font-weight:600}
+.annotation-item .a-time{font-size:11px;color:var(--text2)}
+
+.add-edge-form,.add-comment-form{display:flex;gap:6px;margin-bottom:8px;align-items:center}
+.add-edge-form input,.add-comment-form input{flex:1}
+.add-edge-form input.weight-input{max-width:70px}
+
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--surface2);color:var(--text);padding:10px 20px;border-radius:var(--radius);box-shadow:var(--shadow);font-size:13px;z-index:200;opacity:0;transition:opacity .2s}
+.toast.show{opacity:1}
+.toast.error{border-left:3px solid var(--danger)}
+.toast.success{border-left:3px solid var(--success)}
+
+@media(max-width:768px){
+  #detail-panel{width:100%}
+  .mem-table .text-cell{max-width:200px}
+}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-box">
+    <h1>Anchor Memory</h1>
+    <p>图结构记忆管理系统</p>
+    <input type="password" id="password-input" placeholder="密码" autofocus>
+    <button class="btn" onclick="doLogin()">进入</button>
+    <div id="login-error" style="color:var(--danger);font-size:12px;margin-top:10px;display:none"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <h1>Anchor Memory</h1>
+    <div class="right">
+      <span class="stats-bar" id="stats-bar"></span>
+      <button class="btn-ghost btn-sm" onclick="doLogout()">退出</button>
+    </div>
+  </header>
+
+  <div class="filters">
+    <select id="f-tier" onchange="loadMemories()">
+      <option value="">全部 Tier</option>
+      <option value="core">core</option>
+      <option value="long">long</option>
+      <option value="short">short</option>
+    </select>
+    <select id="f-tag" onchange="loadMemories()"></select>
+    <input type="text" class="search" id="f-search" placeholder="搜索记忆文本..." oninput="debounceSearch()">
+    <select id="f-sort" onchange="loadMemories()">
+      <option value="timestamp">按时间</option>
+      <option value="emotion_score">按情感分数</option>
+      <option value="usage_count">按引用次数</option>
+    </select>
+    <select id="f-order" onchange="loadMemories()">
+      <option value="desc">降序</option>
+      <option value="asc">升序</option>
+    </select>
+  </div>
+
+  <table class="mem-table">
+    <thead>
+      <tr>
+        <th style="width:50px"></th>
+        <th style="width:60px">Tier</th>
+        <th style="width:70px">Tag</th>
+        <th>文本</th>
+        <th style="width:80px">情感</th>
+        <th style="width:50px">引用</th>
+        <th style="width:100px">时间</th>
+      </tr>
+    </thead>
+    <tbody id="mem-tbody"></tbody>
+  </table>
+
+  <div class="pagination" id="pagination"></div>
+</div>
+
+<div id="detail-overlay" onclick="closeDetail()"></div>
+<div id="detail-panel">
+  <button class="close-btn" onclick="closeDetail()">&times;</button>
+  <div id="detail-content"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let currentPage = 1;
+let searchTimer = null;
+
+function toast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', 2000);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    headers: {'Content-Type': 'application/json'},
+    credentials: 'same-origin',
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  if (res.status === 401) { showLogin(); throw new Error('未授权'); }
+  const data = await res.json();
+  if (!res.ok) { toast(data.error || '请求失败', 'error'); throw new Error(data.error); }
+  return data;
+}
+
+function showLogin() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  sessionAuthenticated = false;
+}
+
+let sessionAuthenticated = false;
+
+async function doLogin() {
+  const pw = document.getElementById('password-input').value;
+  const errEl = document.getElementById('login-error');
+  try {
+    await api('/api/login', { method: 'POST', body: { password: pw } });
+    sessionAuthenticated = true;
+    errEl.style.display = 'none';
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    loadMemories();
+    loadStats();
+  } catch(e) {
+    errEl.textContent = '密码错误';
+    errEl.style.display = 'block';
+  }
+}
+
+async function doLogout() {
+  await api('/api/logout', { method: 'POST' });
+  showLogin();
+}
+
+document.getElementById('password-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+function debounceSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { currentPage = 1; loadMemories(); }, 300);
+}
+
+async function loadMemories() {
+  const tier = document.getElementById('f-tier').value;
+  const tag = document.getElementById('f-tag').value;
+  const sort = document.getElementById('f-sort').value;
+  const order = document.getElementById('f-order').value;
+  const q = document.getElementById('f-search').value;
+
+  const params = new URLSearchParams({ page: currentPage, per_page: 30, sort, order });
+  if (tier) params.set('tier', tier);
+  if (tag) params.set('tag', tag);
+  if (q) params.set('q', q);
+
+  const data = await api('/api/memories?' + params);
+
+  const tagSel = document.getElementById('f-tag');
+  const curTag = tagSel.value;
+  tagSel.innerHTML = '<option value="">全部 Tag</option>';
+  data.tags.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t; opt.textContent = t;
+    if (t === curTag) opt.selected = true;
+    tagSel.appendChild(opt);
+  });
+
+  const tbody = document.getElementById('mem-tbody');
+  tbody.innerHTML = '';
+
+  data.items.forEach(m => {
+    const tr = document.createElement('tr');
+    const emotionPct = Math.round((m.emotion_score || 0) * 100);
+    const ts = m.timestamp ? m.timestamp.slice(0, 16).replace('T', ' ') : '';
+    const pinClass = m.pinned ? 'active' : '';
+    const annClass = m.has_annotation ? 'has' : '';
+    const comClass = m.has_comment ? 'has' : '';
+
+    tr.innerHTML = `
+      <td class="icons">
+        <span class="${pinClass}" title="${m.pinned ? '取消固定' : '固定'}" onclick="togglePin(event,'${m.memory_id}',${m.pinned})">${m.pinned ? '\u{1F4CC}' : '\u{1F516}'}</span>
+        <span class="${annClass}" title="${m.annotation_count || 0} 条注解">${m.has_annotation ? '\u{1F4DD}' : ''}</span>
+        <span class="${comClass}" title="${m.comment_count || 0} 条评论">${m.has_comment ? '\u{1F4AC}' : ''}</span>
+      </td>
+      <td><span class="tier-badge tier-${m.tier}">${m.tier}</span></td>
+      <td><span class="tag-badge">${m.tag}</span></td>
+      <td class="text-cell" onclick="openDetail('${m.memory_id}')" title="${escHtml(m.text)}">${escHtml(m.text)}</td>
+      <td>
+        <div class="emotion-bar"><div class="emotion-fill" style="width:${emotionPct}%"></div></div>
+        <span class="meta">${(m.emotion_score || 0).toFixed(2)}</span>
+      </td>
+      <td class="meta">${m.usage_count || 0}</td>
+      <td class="meta">${ts}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  renderPagination(data);
+}
+
+function renderPagination(data) {
+  const el = document.getElementById('pagination');
+  if (data.total_pages <= 1) { el.innerHTML = `<span>共 ${data.total} 条</span>`; return; }
+  let html = `<span>共 ${data.total} 条</span>`;
+  if (data.page > 1) html += `<button class="btn-ghost btn-sm" onclick="goPage(${data.page - 1})">上一页</button>`;
+  html += `<span class="current">${data.page} / ${data.total_pages}</span>`;
+  if (data.page < data.total_pages) html += `<button class="btn-ghost btn-sm" onclick="goPage(${data.page + 1})">下一页</button>`;
+  el.innerHTML = html;
+}
+
+function goPage(p) { currentPage = p; loadMemories(); window.scrollTo(0, 0); }
+
+async function loadStats() {
+  try {
+    const s = await api('/api/stats');
+    document.getElementById('stats-bar').innerHTML =
+      `<span>记忆 <b>${s.total_memories}</b></span>` +
+      `<span>边 <b>${s.total_edges}</b></span>` +
+      `<span>固定 <b>${s.pinned_count}</b></span>`;
+  } catch(e) {}
+}
+
+async function togglePin(e, mid, pinned) {
+  e.stopPropagation();
+  await api(`/api/memories/${mid}/${pinned ? 'unpin' : 'pin'}`, { method: 'POST' });
+  loadMemories();
+  loadStats();
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Detail Panel ───
+
+async function openDetail(mid) {
+  document.getElementById('detail-overlay').style.display = 'block';
+  const panel = document.getElementById('detail-panel');
+  panel.classList.add('open');
+
+  const data = await api(`/api/memories/${mid}`);
+  const m = data.memory;
+
+  let html = `
+    <div class="detail-header">
+      <div class="mid">${escHtml(m.memory_id)}</div>
+      <div class="timestamp">${m.timestamp || ''}</div>
+    </div>
+
+    <div class="section">
+      <h3>文本内容</h3>
+      <textarea class="edit-text" id="d-text">${escHtml(m.text)}</textarea>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="saveText('${mid}')">保存文本 (重生成 Embedding)</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>属性</h3>
+      <div class="field-row">
+        <label>Tier</label>
+        <select id="d-tier" class="value" onchange="saveTier('${mid}')">
+          <option value="core" ${m.tier==='core'?'selected':''}>core</option>
+          <option value="long" ${m.tier==='long'?'selected':''}>long</option>
+          <option value="short" ${m.tier==='short'?'selected':''}>short</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <label>情感分数</label>
+        <div class="value" style="display:flex;align-items:center;gap:10px">
+          <input type="range" id="d-emotion" min="0" max="1" step="0.01" value="${m.emotion_score || 0.5}" oninput="document.getElementById('d-emotion-val').textContent=this.value" onchange="saveEmotion('${mid}')">
+          <span id="d-emotion-val">${(m.emotion_score || 0.5).toFixed(2)}</span>
+        </div>
+      </div>
+      <div class="field-row">
+        <label>固定</label>
+        <div class="value">
+          <button class="btn-sm ${m.pinned ? 'btn' : 'btn-ghost'}" onclick="togglePinDetail('${mid}',${m.pinned})">${m.pinned ? '已固定 (点击取消)' : '未固定 (点击固定)'}</button>
+        </div>
+      </div>
+      <div class="field-row">
+        <label>引用次数</label>
+        <div class="value meta">${m.usage_count || 0}</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>操作</h3>
+      <button class="btn-danger btn-sm" onclick="deleteMemory('${mid}')">删除此记忆</button>
+    </div>
+
+    <div class="section">
+      <h3>邻居节点 (${data.neighbors.length})</h3>
+      <div class="add-edge-form">
+        <input type="text" id="edge-target" placeholder="目标 memory_id">
+        <input type="number" id="edge-weight" class="weight-input" placeholder="权重" value="2.0" step="0.1" min="0.1" max="10">
+        <button class="btn btn-sm" onclick="addEdge('${mid}')">建边</button>
+      </div>
+      <div id="neighbors-list">
+        ${data.neighbors.map(nb => `
+          <div class="neighbor-item">
+            <span class="nb-text" title="${escHtml(nb.text)}">${escHtml(nb.memory_id)} — ${escHtml(nb.text)}</span>
+            <span class="nb-weight">${nb.weight.toFixed(2)}</span>
+            <button class="btn-danger btn-sm" onclick="removeEdge('${mid}','${nb.memory_id}')">删边</button>
+          </div>
+        `).join('')}
+        ${data.neighbors.length === 0 ? '<div style="color:var(--text2);font-size:13px">无邻居节点</div>' : ''}
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>注解 (${data.annotations.length})</h3>
+      <div id="annotations-list">
+        ${data.annotations.map(a => `
+          <div class="annotation-item">
+            <div>${escHtml(a.text)}</div>
+            <div class="a-time">${a.created_at || ''}</div>
+          </div>
+        `).join('')}
+        ${data.annotations.length === 0 ? '<div style="color:var(--text2);font-size:13px">无注解</div>' : ''}
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>评论 (${data.comments.length})</h3>
+      <div class="add-comment-form">
+        <input type="text" id="comment-input" placeholder="写评论...">
+        <button class="btn btn-sm" onclick="addComment('${mid}')">发送</button>
+      </div>
+      <div id="comments-list">
+        ${data.comments.map(c => `
+          <div class="comment-item">
+            <div class="c-meta"><span class="c-author">${escHtml(c.author)}</span> · ${c.created_at || ''}</div>
+            <div>${escHtml(c.content)}</div>
+          </div>
+        `).join('')}
+        ${data.comments.length === 0 ? '<div style="color:var(--text2);font-size:13px">无评论</div>' : ''}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('detail-content').innerHTML = html;
+}
+
+function closeDetail() {
+  document.getElementById('detail-overlay').style.display = 'none';
+  document.getElementById('detail-panel').classList.remove('open');
+}
+
+async function saveText(mid) {
+  const text = document.getElementById('d-text').value.trim();
+  if (!text) { toast('文本不能为空', 'error'); return; }
+  await api(`/api/memories/${mid}`, { method: 'PUT', body: { text } });
+  toast('已保存并重新生成 Embedding');
+  loadMemories();
+}
+
+async function saveTier(mid) {
+  const tier = document.getElementById('d-tier').value;
+  await api(`/api/memories/${mid}`, { method: 'PUT', body: { tier } });
+  toast('Tier 已更新');
+  loadMemories();
+}
+
+async function saveEmotion(mid) {
+  const score = parseFloat(document.getElementById('d-emotion').value);
+  await api(`/api/memories/${mid}`, { method: 'PUT', body: { emotion_score: score } });
+  toast('情感分数已更新');
+  loadMemories();
+}
+
+async function togglePinDetail(mid, pinned) {
+  await api(`/api/memories/${mid}/${pinned ? 'unpin' : 'pin'}`, { method: 'POST' });
+  openDetail(mid);
+  loadMemories();
+  loadStats();
+}
+
+async function deleteMemory(mid) {
+  if (!confirm('确认删除此记忆？此操作不可撤销。')) return;
+  await api(`/api/memories/${mid}`, { method: 'DELETE' });
+  closeDetail();
+  loadMemories();
+  loadStats();
+  toast('已删除');
+}
+
+async function addEdge(mid) {
+  const target = document.getElementById('edge-target').value.trim();
+  const weight = parseFloat(document.getElementById('edge-weight').value) || 2.0;
+  if (!target) { toast('请输入目标 memory_id', 'error'); return; }
+  await api('/api/edges', { method: 'POST', body: { source_id: mid, target_id: target, weight } });
+  toast('边已创建');
+  openDetail(mid);
+  loadMemories();
+}
+
+async function removeEdge(sourceId, targetId) {
+  await api('/api/edges', { method: 'DELETE', body: { source_id: sourceId, target_id: targetId } });
+  toast('边已删除');
+  openDetail(sourceId);
+}
+
+async function addComment(mid) {
+  const input = document.getElementById('comment-input');
+  const content = input.value.trim();
+  if (!content) { toast('评论内容不能为空', 'error'); return; }
+  await api(`/api/memories/${mid}/comments`, { method: 'POST', body: { content } });
+  input.value = '';
+  openDetail(mid);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeDetail();
+});
+
+// Check session on load
+(async () => {
+  try {
+    await api('/api/stats');
+    sessionAuthenticated = true;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    loadMemories();
+    loadStats();
+  } catch(e) {
+    showLogin();
+  }
+})();
+</script>
+</body>
+</html>
