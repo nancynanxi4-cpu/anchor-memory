@@ -354,6 +354,78 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
             "tiers": tiers,
         })
 
+    @app.route("/api/consolidate", methods=["POST"])
+    @login_required
+    def run_consolidate():
+        try:
+            from anchor_llm import get_default_llm, ConfigError
+            llm = get_default_llm()
+        except ImportError:
+            return jsonify({"error": "anchor_llm 模块未找到"}), 500
+        except ConfigError as e:
+            return jsonify({"error": str(e)}), 500
+
+        import concept_link
+        db_file = mem.db.db_path
+        db_dir = os.path.dirname(db_file) or "."
+        cache_path = os.path.join(db_dir, "concept_cache.json")
+        cache = concept_link._load_cache(cache_path)
+
+        all_mems = mem.db.list_all(limit=10000, offset=0)
+        if len(all_mems) < 2:
+            return jsonify({"error": "记忆数量不足，至少需要 2 条"}), 400
+
+        concepts = concept_link.extract_concepts(all_mems, cache, llm=llm)
+        concept_link._save_cache(cache_path, cache)
+
+        candidates = concept_link.concept_match(concepts)
+
+        per_memory_count = {}
+        capped = []
+        candidates.sort(key=lambda c: len(c[2]), reverse=True)
+        for c in candidates:
+            a, b, _ = c
+            if (per_memory_count.get(a, 0) >= concept_link.MAX_EDGES_PER_MEMORY
+                    or per_memory_count.get(b, 0) >= concept_link.MAX_EDGES_PER_MEMORY):
+                continue
+            per_memory_count[a] = per_memory_count.get(a, 0) + 1
+            per_memory_count[b] = per_memory_count.get(b, 0) + 1
+            capped.append(c)
+        candidates = capped
+
+        if not candidates:
+            return jsonify({"candidates": 0, "new_edges": 0, "strengthened": 0, "message": "未发现可连接的记忆对"})
+
+        memories_dict = {m['memory_id']: m for m in all_mems}
+        confirmed = concept_link.confirm_pairs(candidates, memories_dict, llm=llm)
+
+        new_edges = 0
+        strengthened = 0
+        for id_a, id_b, _ in confirmed:
+            existing = mem.db.get_edge_weight(id_a, id_b)
+            if existing is None or existing == 0:
+                mem.db.connect(id_a, id_b, weight=concept_link.CONNECT_WEIGHT)
+                new_edges += 1
+            else:
+                mem.db.connect(id_a, id_b, weight=min(existing + 0.1, 10.0))
+                strengthened += 1
+
+        log.info("auto_consolidate: candidates=%d confirmed=%d new=%d strengthened=%d",
+                 len(candidates), len(confirmed), new_edges, strengthened)
+        return jsonify({
+            "candidates": len(candidates),
+            "confirmed": len(confirmed),
+            "new_edges": new_edges,
+            "strengthened": strengthened,
+        })
+
+    @app.route("/api/dream-pass", methods=["POST"])
+    @login_required
+    def run_dream_pass():
+        stats = mem.dream_pass()
+        log.info("manual dream_pass: %s", stats)
+        return jsonify(stats)
+
     return app
 
 

@@ -127,6 +127,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
     <h1>Anchor Memory</h1>
     <div class="right">
       <span class="stats-bar" id="stats-bar"></span>
+      <button class="btn-sm btn-ghost" id="btn-consolidate" onclick="runConsolidate()">Auto Consolidate</button>
+      <button class="btn-sm btn-ghost" id="btn-dream" onclick="runDreamPass()">Dream Pass</button>
       <button class="btn-ghost btn-sm" onclick="doLogout()">退出</button>
     </div>
   </header>
@@ -508,6 +510,29 @@ async function addComment(mid) {
   await api(`/api/memories/${mid}/comments`, { method: 'POST', body: { content } });
   input.value = '';
   openDetail(mid);
+}
+
+async function runConsolidate() {
+  const btn = document.getElementById('btn-consolidate');
+  btn.disabled = true; btn.textContent = '扫描中...';
+  try {
+    const r = await api('/api/consolidate', { method: 'POST' });
+    toast(`完成: 候选 ${r.candidates} 对, 确认 ${r.confirmed} 对, 新建 ${r.new_edges} 边, 加强 ${r.strengthened} 边`);
+    loadMemories(); loadStats();
+  } catch(e) {}
+  btn.disabled = false; btn.textContent = 'Auto Consolidate';
+}
+
+async function runDreamPass() {
+  const btn = document.getElementById('btn-dream');
+  btn.disabled = true; btn.textContent = '执行中...';
+  try {
+    const r = await api('/api/dream-pass', { method: 'POST' });
+    const lines = Object.entries(r).map(([k,v]) => `${k}=${v}`).join(', ');
+    toast(`Dream Pass: ${lines}`);
+    loadMemories(); loadStats();
+  } catch(e) {}
+  btn.disabled = false; btn.textContent = 'Dream Pass';
 }
 
 document.addEventListener('keydown', e => {
