@@ -315,11 +315,14 @@ if __name__ == "__main__":
     parser.add_argument("--auth-token", default=None, help="Bearer token (env: ANCHOR_API_KEY)")
     args = parser.parse_args()
 
+    transport = args.transport if args.transport != "stdio" else os.environ.get("ANCHOR_TRANSPORT", "stdio")
+    host = args.host if args.host != "127.0.0.1" else os.environ.get("ANCHOR_HOST", "127.0.0.1")
+    port = args.port if args.port != 3333 else int(os.environ.get("ANCHOR_PORT", "3333"))
     auth_token = args.auth_token or os.environ.get("ANCHOR_API_KEY")
 
     os.makedirs(args.db_path, exist_ok=True)
     mem = AnchorMemory(db_path=args.db_path)
 
-    mcp = create_mcp_server(mem, host=args.host, port=args.port, auth_token=auth_token)
+    mcp = create_mcp_server(mem, host=host, port=port, auth_token=auth_token)
 
-    mcp.run(transport=args.transport)
+    mcp.run(transport=transport)
