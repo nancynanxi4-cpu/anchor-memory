@@ -208,6 +208,36 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
     <button class="btn-sm btn-ghost" id="btn-test-llm" onclick="testLLMConfig()">测试连接</button>
     <button class="btn-sm btn-ghost" onclick="resetLLMConfig()">重置</button>
   </div>
+
+  <hr style="border:none;border-top:1px solid var(--border);margin:20px 0 16px">
+
+  <h3 style="margin-bottom:4px">Embedding 向量模型</h3>
+  <p style="color:var(--text2);font-size:12px;margin-bottom:10px" id="emb-status">当前: 加载中...</p>
+  <div class="field-row">
+    <label>Provider</label>
+    <select id="emb-provider" class="value" onchange="onEmbProviderChange()">
+      <option value="local">Local (sentence-transformers, 免费)</option>
+      <option value="openai">OpenAI Embeddings API</option>
+      <option value="openai-compat">OpenAI 兼容 (DeepSeek/Ollama 等)</option>
+    </select>
+  </div>
+  <div class="field-row">
+    <label>Model</label>
+    <input type="text" id="emb-model" class="value" placeholder="如 text-embedding-3-small">
+  </div>
+  <div class="field-row" id="emb-apikey-row">
+    <label>API Key</label>
+    <input type="password" id="emb-apikey" class="value" placeholder="留空则从环境变量读取">
+  </div>
+  <div class="field-row" id="emb-endpoint-row">
+    <label>Endpoint</label>
+    <input type="text" id="emb-endpoint" class="value" placeholder="如 https://api.deepseek.com/v1">
+  </div>
+  <div style="display:flex;gap:8px;margin-top:12px">
+    <button class="btn btn-sm" onclick="saveEmbeddingConfig()">保存并切换</button>
+    <button class="btn-sm btn-ghost" id="btn-test-emb" onclick="testEmbeddingConfig()">测试</button>
+    <button class="btn-sm btn-ghost" onclick="resetEmbeddingConfig()">重置</button>
+  </div>
 </div>
 
 <script>
@@ -577,7 +607,7 @@ async function runDreamPass() {
 function openSettings() {
   const panel = document.getElementById('settings-panel');
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-  if (panel.style.display === 'block') loadLLMConfig();
+  if (panel.style.display === 'block') { loadLLMConfig(); loadEmbeddingConfig(); }
 }
 
 async function loadLLMConfig() {
@@ -621,6 +651,67 @@ async function resetLLMConfig() {
   document.getElementById('s-apikey').value = '';
   document.getElementById('s-endpoint').value = '';
   toast('已重置');
+}
+
+function onEmbProviderChange() {
+  const p = document.getElementById('emb-provider').value;
+  const showKey = p !== 'local';
+  const showEndpoint = p === 'openai-compat';
+  document.getElementById('emb-apikey-row').style.display = showKey ? 'flex' : 'none';
+  document.getElementById('emb-endpoint-row').style.display = showEndpoint ? 'flex' : 'none';
+  if (p === 'local' && !document.getElementById('emb-model').value) {
+    document.getElementById('emb-model').value = 'paraphrase-multilingual-MiniLM-L12-v2';
+  } else if (p !== 'local' && document.getElementById('emb-model').value === 'paraphrase-multilingual-MiniLM-L12-v2') {
+    document.getElementById('emb-model').value = '';
+  }
+}
+
+async function loadEmbeddingConfig() {
+  try {
+    const cfg = await api('/api/embedding-config');
+    document.getElementById('emb-provider').value = cfg.provider || 'local';
+    document.getElementById('emb-model').value = cfg.model || '';
+    document.getElementById('emb-apikey').value = cfg.api_key || '';
+    document.getElementById('emb-endpoint').value = cfg.endpoint || '';
+    const statusEl = document.getElementById('emb-status');
+    const model = cfg.active_model || cfg.model || '-';
+    statusEl.textContent = `当前: ${cfg.active_provider} / ${model} (维度: ${cfg.active_dimension})`;
+    onEmbProviderChange();
+  } catch(e) {}
+}
+
+async function saveEmbeddingConfig() {
+  const provider = document.getElementById('emb-provider').value;
+  const model = document.getElementById('emb-model').value.trim();
+  if (provider !== 'local' && !model) { toast('API 模式必须指定 Model', 'error'); return; }
+  const data = {
+    provider,
+    model,
+    api_key: document.getElementById('emb-apikey').value.trim(),
+    endpoint: document.getElementById('emb-endpoint').value.trim(),
+  };
+  try {
+    const r = await api('/api/embedding-config', { method: 'PUT', body: data });
+    toast(`Embedding 已切换: ${r.provider} (维度: ${r.dimension})`);
+    loadEmbeddingConfig();
+  } catch(e) {}
+}
+
+async function testEmbeddingConfig() {
+  const btn = document.getElementById('btn-test-emb');
+  btn.disabled = true; btn.textContent = '测试中...';
+  try {
+    const r = await api('/api/embedding-config/test', { method: 'POST' });
+    toast(`测试成功: provider=${r.provider}, 维度=${r.dimension}, 样本=[${r.sample.map(v=>v.toFixed(4)).join(',')}...]`);
+  } catch(e) {}
+  btn.disabled = false; btn.textContent = '测试';
+}
+
+async function resetEmbeddingConfig() {
+  if (!confirm('确认重置 Embedding 配置？将恢复为本地默认模型。')) return;
+  await api('/api/embedding-config', { method: 'DELETE' });
+  loadEmbeddingConfig();
+  toast('Embedding 已重置为本地模型');
 }
 
 document.addEventListener('keydown', e => {

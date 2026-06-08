@@ -113,6 +113,53 @@ def main():
 
     print()
     print("─" * 60)
+    print("Embedding model")
+    print("─" * 60)
+    print("Anchor uses embeddings for vector search. Default is a local model")
+    print("(no API key needed, ~470MB download). You can also use an API.")
+    print()
+
+    EMBED_PROVIDERS = [
+        ("local", "Local sentence-transformers (default, free)"),
+        ("openai", "OpenAI Embeddings API (text-embedding-3-small)"),
+        ("openai-compat", "OpenAI-compatible endpoint (DeepSeek, Ollama, etc.)"),
+    ]
+    for i, (ep, el) in enumerate(EMBED_PROVIDERS, 1):
+        print(f"  {i}) {el}")
+    print()
+
+    echoice = _prompt("Embedding provider (1-3)", "1")
+    try:
+        eidx = int(echoice) - 1
+        ekey, elabel = EMBED_PROVIDERS[eidx]
+    except (ValueError, IndexError):
+        ekey = "local"
+
+    cfg.setdefault("embedding", {})
+    if ekey == "local":
+        model_name = _prompt("Local model name", "paraphrase-multilingual-MiniLM-L12-v2")
+        cfg["embedding"]["provider"] = "local"
+        cfg["embedding"]["model"] = model_name
+    elif ekey == "openai":
+        cfg["embedding"]["provider"] = "openai"
+        cfg["embedding"]["model"] = _prompt("Model", "text-embedding-3-small")
+        eapi = os.getenv("OPENAI_API_KEY")
+        if eapi:
+            print("OPENAI_API_KEY found in environment — Anchor will use it.")
+        else:
+            ek = _prompt("Paste OPENAI_API_KEY (or leave blank to set in env)")
+            if ek:
+                cfg["embedding"]["api_key"] = ek
+    elif ekey == "openai-compat":
+        cfg["embedding"]["provider"] = "openai-compat"
+        cfg["embedding"]["model"] = _prompt("Model", "text-embedding-3-small")
+        cfg["embedding"]["endpoint"] = _prompt("Endpoint URL", "https://api.deepseek.com/v1")
+        ek2 = _prompt("API key (or leave blank to set ANCHOR_EMBEDDING_API_KEY in env)")
+        if ek2:
+            cfg["embedding"]["api_key"] = ek2
+
+    print()
+    print("─" * 60)
     print("Spend caps (recommended)")
     print("─" * 60)
     print("Anchor tracks LLM spend in ~/.anchor/spend.jsonl and can refuse")

@@ -24,24 +24,34 @@ Created by Limen. 底色是爱.
 """
 
 import chromadb
-from sentence_transformers import SentenceTransformer
 from datetime import datetime
 import os
 
 from anchor_db import AnchorDB
+from anchor_embedding import get_embedder, Embedder
 
 
 class AnchorMemory:
     """Graph-structured memory system with Hebbian learning."""
 
-    def __init__(self, db_path: str, embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"):
+    def __init__(self, db_path: str, embedding_model: str = None,
+                 embedder: Embedder = None):
         """Initialize memory system.
 
         Args:
             db_path: Directory for ChromaDB and SQLite storage.
-            embedding_model: SentenceTransformer model name.
+            embedding_model: Deprecated. SentenceTransformer model name for
+                backward compatibility. Ignored if *embedder* is provided.
+            embedder: Pre-built Embedder instance. If None, one is created
+                via ``get_embedder()`` (reads ANCHOR_EMBEDDING env var).
         """
-        self._embedder = SentenceTransformer(embedding_model)
+        if embedder is not None:
+            self._embedder = embedder
+        elif embedding_model is not None:
+            from anchor_embedding import LocalEmbedder
+            self._embedder = LocalEmbedder(model_name=embedding_model)
+        else:
+            self._embedder = get_embedder()
         self._client = chromadb.PersistentClient(path=os.path.join(db_path, "chroma"))
         self._collection = self._client.get_or_create_collection(
             name="memories",

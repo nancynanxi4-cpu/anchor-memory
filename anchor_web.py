@@ -513,6 +513,122 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
                 pass
         return jsonify({"ok": True})
 
+    @app.route("/api/embedding-config", methods=["GET"])
+    @login_required
+    def get_embedding_config():
+        try:
+            import yaml
+        except ImportError:
+            return jsonify({"error": "pyyaml 未安装"}), 500
+        from anchor_embedding import CONFIG_DIR
+        cfg_path = CONFIG_DIR / "config.yaml"
+        cfg = {}
+        if cfg_path.exists():
+            try:
+                cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                pass
+        emb_cfg = cfg.get("embedding", {})
+        current = {
+            "provider": emb_cfg.get("provider", "local"),
+            "model": emb_cfg.get("model", ""),
+            "api_key": emb_cfg.get("api_key", ""),
+            "endpoint": emb_cfg.get("endpoint", ""),
+            "active_provider": mem._embedder.provider,
+            "active_dimension": mem._embedder.dimension,
+        }
+        if hasattr(mem._embedder, "model_name"):
+            current["active_model"] = mem._embedder.model_name
+        elif hasattr(mem._embedder, "model"):
+            current["active_model"] = mem._embedder.model
+        else:
+            current["active_model"] = ""
+        return jsonify(current)
+
+    @app.route("/api/embedding-config", methods=["PUT"])
+    @login_required
+    def set_embedding_config():
+        try:
+            import yaml
+        except ImportError:
+            return jsonify({"error": "pyyaml 未安装"}), 500
+        from anchor_embedding import CONFIG_DIR
+        cfg_path = CONFIG_DIR / "config.yaml"
+        data = request.get_json(force=True)
+        provider = data.get("provider", "local").strip()
+        model = data.get("model", "").strip()
+        api_key = data.get("api_key", "").strip()
+        endpoint = data.get("endpoint", "").strip()
+
+        cfg = {}
+        if cfg_path.exists():
+            try:
+                cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                pass
+
+        cfg["embedding"] = {"provider": provider}
+        if model:
+            cfg["embedding"]["model"] = model
+        if api_key:
+            cfg["embedding"]["api_key"] = api_key
+        if endpoint:
+            cfg["embedding"]["endpoint"] = endpoint
+
+        cfg_path.parent.mkdir(exist_ok=True)
+        cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        try:
+            cfg_path.chmod(0o600)
+        except Exception:
+            pass
+
+        try:
+            from anchor_embedding import get_embedder
+            mem._embedder = get_embedder()
+            log.info("Embedder reloaded: provider=%s", mem._embedder.provider)
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"配置已保存但加载失败: {e}"}), 500
+
+        return jsonify({"ok": True, "provider": mem._embedder.provider, "dimension": mem._embedder.dimension})
+
+    @app.route("/api/embedding-config/test", methods=["POST"])
+    @login_required
+    def test_embedding_config():
+        try:
+            vec = mem._embedder.encode("测试文本")
+            dim = len(vec)
+            return jsonify({
+                "ok": True,
+                "provider": mem._embedder.provider,
+                "dimension": dim,
+                "sample": vec[:5],
+            })
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.route("/api/embedding-config", methods=["DELETE"])
+    @login_required
+    def reset_embedding_config():
+        try:
+            import yaml
+        except ImportError:
+            return jsonify({"error": "pyyaml 未安装"}), 500
+        from anchor_embedding import CONFIG_DIR
+        cfg_path = CONFIG_DIR / "config.yaml"
+        if cfg_path.exists():
+            try:
+                cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+                cfg.pop("embedding", None)
+                cfg_path.write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True), encoding="utf-8")
+            except Exception:
+                pass
+        try:
+            from anchor_embedding import get_embedder
+            mem._embedder = get_embedder()
+        except Exception:
+            pass
+        return jsonify({"ok": True})
+
     return app
 
 
