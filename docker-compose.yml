@@ -14,7 +14,7 @@ services:
       - ANCHOR_LLM_API_KEY=${ANCHOR_LLM_API_KEY:-}
       - ANCHOR_LLM_ENDPOINT=${ANCHOR_LLM_ENDPOINT:-}
     restart: unless-stopped
-    mem_limit: 1g
+    mem_limit: 2g
 
 volumes:
   anchor_data:
