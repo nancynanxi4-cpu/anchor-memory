@@ -1,18 +1,18 @@
 #!/bin/bash
 set -e
 
-MODE="${ANCHOR_MODE:-web}"
+MODE="${ANCHOR_MODE:-both}"
 
 case "$MODE" in
   web)
     exec python anchor_web.py --db-path /app/anchor_data --host 0.0.0.0 --port 8000
     ;;
   mcp)
-    exec python anchor_mcp.py --db-path /app/anchor_data --transport streamable-http --host 0.0.0.0 --port 8000
+    exec python anchor_mcp.py --db-path /app/anchor_data --transport streamable-http --host 0.0.0.0 --port 8001
     ;;
   both)
     python anchor_web.py --db-path /app/anchor_data --host 0.0.0.0 --port 8000 &
-    exec python anchor_mcp.py --db-path /app/anchor_data --transport streamable-http --host 0.0.0.0 --port 8000
+    exec python anchor_mcp.py --db-path /app/anchor_data --transport streamable-http --host 0.0.0.0 --port 8001
     ;;
   *)
     echo "Unknown ANCHOR_MODE: $MODE (use web|mcp|both)"

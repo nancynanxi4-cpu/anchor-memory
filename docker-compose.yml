@@ -4,13 +4,13 @@ services:
     container_name: anchor
     ports:
       - "8000:8000"
+      - "8001:8001"
     volumes:
       - anchor_data:/app/anchor_data
     environment:
-      - ANCHOR_API_KEY=${ANCHOR_API_KEY:-}
+      - ANCHOR_MODE=both
       - ANCHOR_DASHBOARD_PASSWORD=${ANCHOR_DASHBOARD_PASSWORD:-}
-      - ANCHOR_TRANSPORT=streamable-http
-      - ANCHOR_PORT=8000
+      - ANCHOR_API_KEY=${ANCHOR_API_KEY:-}
       - ANCHOR_LLM=${ANCHOR_LLM:-}
       - ANCHOR_LLM_API_KEY=${ANCHOR_LLM_API_KEY:-}
       - ANCHOR_LLM_ENDPOINT=${ANCHOR_LLM_ENDPOINT:-}
