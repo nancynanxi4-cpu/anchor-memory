@@ -312,12 +312,14 @@ if __name__ == "__main__":
     )
     parser.add_argument("--host", default="127.0.0.1", help="Host for streamable-http (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=3333, help="Port for streamable-http (default: 3333)")
-    parser.add_argument("--auth-token", default=None, help="Bearer token for streamable-http authentication")
+    parser.add_argument("--auth-token", default=None, help="Bearer token (env: ANCHOR_API_KEY)")
     args = parser.parse_args()
+
+    auth_token = args.auth_token or os.environ.get("ANCHOR_API_KEY")
 
     os.makedirs(args.db_path, exist_ok=True)
     mem = AnchorMemory(db_path=args.db_path)
 
-    mcp = create_mcp_server(mem, host=args.host, port=args.port, auth_token=args.auth_token)
+    mcp = create_mcp_server(mem, host=args.host, port=args.port, auth_token=auth_token)
 
     mcp.run(transport=args.transport)

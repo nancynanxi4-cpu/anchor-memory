@@ -9,6 +9,9 @@ services:
     environment:
       - ANCHOR_WEB_PASSWORD=${ANCHOR_WEB_PASSWORD:-anchor}
       - ANCHOR_MODE=web
+      - ANCHOR_LLM=${ANCHOR_LLM:-}
+      - ANCHOR_LLM_API_KEY=${ANCHOR_LLM_API_KEY:-}
+      - ANCHOR_LLM_ENDPOINT=${ANCHOR_LLM_ENDPOINT:-}
     restart: unless-stopped
     mem_limit: 1g
 
@@ -21,6 +24,10 @@ services:
       - anchor_data:/data
     environment:
       - ANCHOR_MODE=mcp
+      - ANCHOR_API_KEY=${ANCHOR_API_KEY:-}
+      - ANCHOR_LLM=${ANCHOR_LLM:-}
+      - ANCHOR_LLM_API_KEY=${ANCHOR_LLM_API_KEY:-}
+      - ANCHOR_LLM_ENDPOINT=${ANCHOR_LLM_ENDPOINT:-}
     restart: unless-stopped
     mem_limit: 1g
 

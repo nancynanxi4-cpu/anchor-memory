@@ -337,15 +337,11 @@ def _parse_env_spec(spec: str) -> tuple[str, str]:
 
 
 def get_default_llm(override: Optional[LLM] = None) -> LLM:
-    """Resolve the LLM to use. Resolution: override > env > file config > Anthropic fallback."""
+    """Resolve the LLM to use. Resolution: override > config.yaml > env > Anthropic fallback."""
     if override is not None:
         return override
 
-    env_spec = os.getenv("ANCHOR_LLM")
-    if env_spec:
-        provider, model = _parse_env_spec(env_spec)
-        return _build_llm(provider, model)
-
+    # 1. config.yaml (Web UI writes here, highest priority after override)
     cfg = _load_config()
     llm_cfg = cfg.get("llm", {})
     if llm_cfg.get("provider"):
@@ -356,16 +352,27 @@ def get_default_llm(override: Optional[LLM] = None) -> LLM:
             endpoint=llm_cfg.get("endpoint"),
         )
 
-    # Fallback: Anthropic + Haiku if key is in env
+    # 2. Environment variables
+    env_spec = os.getenv("ANCHOR_LLM")
+    if env_spec:
+        provider, model = _parse_env_spec(env_spec)
+        return _build_llm(
+            provider, model,
+            api_key=os.environ.get("ANCHOR_LLM_API_KEY"),
+            endpoint=os.environ.get("ANCHOR_LLM_ENDPOINT"),
+        )
+
+    # 3. Fallback: Anthropic + Haiku if key is in env
     if os.getenv("ANTHROPIC_API_KEY"):
         return AnthropicLLM(model="claude-haiku-4-5-20251001")
 
     raise ConfigError(
         "No LLM configured for Anchor.\n\n"
         "Options:\n"
-        "  1. Run `python -m anchor_init` to set up (recommended).\n"
-        "  2. Set ANCHOR_LLM env: e.g. ANCHOR_LLM='anthropic/claude-haiku-4-5-20251001'\n"
-        "  3. Edit ~/.anchor/config.yaml directly.\n"
+        "  1. Configure via Web UI settings panel.\n"
+        "  2. Set ANCHOR_LLM env: e.g. ANCHOR_LLM='openai-compat/deepseek-chat'\n"
+        "     Plus ANCHOR_LLM_API_KEY and ANCHOR_LLM_ENDPOINT for openai-compat.\n"
+        "  3. Run `python -m anchor_init` to set up.\n"
         "  4. Set ANTHROPIC_API_KEY to auto-use Anthropic Haiku.\n\n"
         "Anchor's store/search/hebbian/emotion features work WITHOUT an LLM.\n"
         "Only dream pass, concept linking, and search_multi (with intent split)\n"
