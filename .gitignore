@@ -10,6 +10,9 @@ venv/
 .anchor/
 anchor_config.yaml
 
+# ChromaDB / memory data
+anchor_data/
+
 # Internal documentation — 小红书 / personal release notes (use RELEASE_NOTES_*.md
 # for the public-facing changelogs instead).
 XHS_*.md
