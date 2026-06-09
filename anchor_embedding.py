@@ -67,11 +67,15 @@ class OpenAIEmbedder(Embedder):
         )
         self._dimensions = dimensions
 
-        test_resp = self._client.embeddings.create(
-            input=["test"], model=self.model,
-            dimensions=dimensions if dimensions else None,
-        )
-        self.dimension = len(test_resp.data[0].embedding)
+        try:
+            test_resp = self._client.embeddings.create(
+                input=["test"], model=self.model,
+                dimensions=dimensions if dimensions else None,
+            )
+            self.dimension = len(test_resp.data[0].embedding)
+        except Exception:
+            self.dimension = 1536
+            log.warning("OpenAIEmbedder test call failed, using default dimension=%d", self.dimension)
         display = f"{endpoint}/{model}" if endpoint else model
         log.info("OpenAIEmbedder ready: %s (dim=%d)", display, self.dimension)
 

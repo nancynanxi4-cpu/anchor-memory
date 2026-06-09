@@ -312,7 +312,7 @@ def _dream_loop(mem, interval_hours: int = 24):
             stats = mem.dream_pass()
             log.info("auto dream_pass: %s", stats)
         except Exception as e:
-            log.error("auto dream_pass failed: %s", e)
+            log.error("auto dream_pass failed: %s", e, exc_info=True)
 
 
 if __name__ == "__main__":
