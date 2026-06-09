@@ -184,7 +184,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
   <h3 style="margin-bottom:12px">LLM 配置</h3>
   <div class="field-row">
     <label>Provider</label>
-    <select id="s-provider" class="value" onchange="document.getElementById('s-endpoint').value=''">
+    <select id="s-provider" class="value" onchange="onLLMProviderChange()">
       <option value="anthropic">Anthropic (Claude)</option>
       <option value="openai">OpenAI (GPT)</option>
       <option value="google">Google (Gemini)</option>
@@ -199,7 +199,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
     <label>API Key</label>
     <input type="password" id="s-apikey" class="value" placeholder="留空则从环境变量读取">
   </div>
-  <div class="field-row">
+  <div class="field-row" id="s-endpoint-row">
     <label>Endpoint</label>
     <input type="text" id="s-endpoint" class="value" placeholder="OpenAI 兼容时必填，如 https://api.deepseek.com/v1">
   </div>
@@ -216,7 +216,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
   <div class="field-row">
     <label>Provider</label>
     <select id="emb-provider" class="value" onchange="onEmbProviderChange()">
-      <option value="local">Local (sentence-transformers, 免费)</option>
       <option value="openai">OpenAI Embeddings API</option>
       <option value="openai-compat">OpenAI 兼容 (DeepSeek/Ollama 等)</option>
     </select>
@@ -653,23 +652,29 @@ async function resetLLMConfig() {
   toast('已重置');
 }
 
+function onLLMProviderChange() {
+  const p = document.getElementById('s-provider').value;
+  const showEndpoint = p === 'openai-compat';
+  document.getElementById('s-endpoint-row').style.display = showEndpoint ? 'flex' : 'none';
+  if (!showEndpoint) {
+    document.getElementById('s-endpoint').value = '';
+  }
+}
+
 function onEmbProviderChange() {
   const p = document.getElementById('emb-provider').value;
-  const showKey = p !== 'local';
   const showEndpoint = p === 'openai-compat';
-  document.getElementById('emb-apikey-row').style.display = showKey ? 'flex' : 'none';
+  document.getElementById('emb-apikey-row').style.display = 'flex';
   document.getElementById('emb-endpoint-row').style.display = showEndpoint ? 'flex' : 'none';
-  if (p === 'local' && !document.getElementById('emb-model').value) {
-    document.getElementById('emb-model').value = 'paraphrase-multilingual-MiniLM-L12-v2';
-  } else if (p !== 'local' && document.getElementById('emb-model').value === 'paraphrase-multilingual-MiniLM-L12-v2') {
-    document.getElementById('emb-model').value = '';
+  if (!showEndpoint) {
+    document.getElementById('emb-endpoint').value = '';
   }
 }
 
 async function loadEmbeddingConfig() {
   try {
     const cfg = await api('/api/embedding-config');
-    document.getElementById('emb-provider').value = cfg.provider || 'local';
+    document.getElementById('emb-provider').value = cfg.provider || 'openai-compat';
     document.getElementById('emb-model').value = cfg.model || '';
     document.getElementById('emb-apikey').value = cfg.api_key || '';
     document.getElementById('emb-endpoint').value = cfg.endpoint || '';
@@ -683,7 +688,7 @@ async function loadEmbeddingConfig() {
 async function saveEmbeddingConfig() {
   const provider = document.getElementById('emb-provider').value;
   const model = document.getElementById('emb-model').value.trim();
-  if (provider !== 'local' && !model) { toast('API 模式必须指定 Model', 'error'); return; }
+  if (!model) { toast('Model 不能为空', 'error'); return; }
   const data = {
     provider,
     model,
@@ -708,10 +713,10 @@ async function testEmbeddingConfig() {
 }
 
 async function resetEmbeddingConfig() {
-  if (!confirm('确认重置 Embedding 配置？将恢复为本地默认模型。')) return;
+  if (!confirm('确认重置 Embedding 配置？将恢复为默认 API 配置。')) return;
   await api('/api/embedding-config', { method: 'DELETE' });
   loadEmbeddingConfig();
-  toast('Embedding 已重置为本地模型');
+  toast('Embedding 已重置为默认配置');
 }
 
 document.addEventListener('keydown', e => {

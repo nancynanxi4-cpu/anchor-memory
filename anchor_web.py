@@ -530,7 +530,7 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
                 pass
         emb_cfg = cfg.get("embedding", {})
         current = {
-            "provider": emb_cfg.get("provider", "local"),
+            "provider": emb_cfg.get("provider", "openai-compat"),
             "model": emb_cfg.get("model", ""),
             "api_key": emb_cfg.get("api_key", ""),
             "endpoint": emb_cfg.get("endpoint", ""),
@@ -555,7 +555,7 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
         from anchor_embedding import CONFIG_DIR
         cfg_path = CONFIG_DIR / "config.yaml"
         data = request.get_json(force=True)
-        provider = data.get("provider", "local").strip()
+        provider = data.get("provider", "openai-compat").strip()
         model = data.get("model", "").strip()
         api_key = data.get("api_key", "").strip()
         endpoint = data.get("endpoint", "").strip()
