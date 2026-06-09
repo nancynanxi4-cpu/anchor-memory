@@ -648,4 +648,9 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
 
     app = create_app(args.db_path)
-    app.run(host=args.host, port=args.port, debug=args.debug)
+    if args.debug:
+        app.run(host=args.host, port=args.port, debug=True)
+    else:
+        from waitress import serve
+        print(f"Starting production server (waitress)...")
+        serve(app, host=args.host, port=args.port)
