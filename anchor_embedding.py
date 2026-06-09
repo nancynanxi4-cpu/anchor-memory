@@ -8,7 +8,8 @@ Supports two modes:
 Resolution order for `get_embedder()`:
   1. Explicit parameters passed by caller
   2. ANCHOR_EMBEDDING env var (format: "provider/model" e.g. "openai/text-embedding-3-small")
-  3. local fallback with sentence-transformers
+  3. ~/.anchor/config.yaml embedding section
+  4. Fallback: openai-compat / text-embedding-3-small
 """
 from __future__ import annotations
 
@@ -28,10 +29,20 @@ class Embedder:
     dimension: int = 0
 
     def encode(self, text: str) -> list[float]:
+        raise NotImplementedError
+
+    def encode_batch(self, texts: list[str]) -> list[list[float]]:
+        raise NotImplementedError
+
+
+class LocalEmbedder(Embedder):
+    """Local sentence-transformers embedder."""
+
+    provider = "local"
+
+    def __init__(self, model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"):
         from sentence_transformers import SentenceTransformer
         self._model = SentenceTransformer(model_name)
-        result = self._model.encode(text)
-        return result.tolist() if hasattr(result, 'tolist') else list(result)
         self.model_name = model_name
         test = self._model.encode(["test"])
         self.dimension = len(test[0])
@@ -136,7 +147,7 @@ def get_embedder(
       1. Explicit provider arg
       2. ANCHOR_EMBEDDING env var ("provider/model")
       3. ~/.anchor/config.yaml embedding section
-      4. Fallback: openai-compat (using ANCHOR_LLM_API_KEY / ANCHOR_LLM_ENDPOINT)
+      4. Fallback: openai-compat / text-embedding-3-small
     """
     env_provider, env_model = _parse_env()
     yaml_cfg = _load_config_yaml()
@@ -152,16 +163,14 @@ def get_embedder(
         final_api_key = (
             api_key
             or os.environ.get("ANCHOR_EMBEDDING_API_KEY")
-            or os.environ.get("OPENAI_API_KEY")
-            or os.environ.get("ANCHOR_LLM_API_KEY")
             or yaml_cfg.get("api_key")
         )
         if not final_api_key:
             raise ValueError(
-                "ANCHOR_EMBEDDING_API_KEY or ANCHOR_LLM_API_KEY or OPENAI_API_KEY is required for "
+                "ANCHOR_EMBEDDING_API_KEY is required for "
                 f"provider '{final_provider}'. Set it in .env or environment."
             )
-        final_endpoint = endpoint or os.environ.get("ANCHOR_EMBEDDING_ENDPOINT") or os.environ.get("ANCHOR_LLM_ENDPOINT") or yaml_cfg.get("endpoint")
+        final_endpoint = endpoint or os.environ.get("ANCHOR_EMBEDDING_ENDPOINT") or yaml_cfg.get("endpoint")
         model_name = final_model or "text-embedding-3-small"
         return OpenAIEmbedder(
             model=model_name,
