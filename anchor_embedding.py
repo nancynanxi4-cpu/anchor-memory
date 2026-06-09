@@ -152,8 +152,8 @@ def get_embedder(
     env_provider, env_model = _parse_env()
     yaml_cfg = _load_config_yaml()
 
-    final_provider = provider or yaml_cfg.get("provider") or env_provider or "openai-compat"
-    final_model = model or yaml_cfg.get("model") or env_model or "text-embedding-3-small"
+    final_provider = provider or env_provider or yaml_cfg.get("provider") or "openai-compat"
+    final_model = model or env_model or yaml_cfg.get("model") or "text-embedding-3-small"
 
     if final_provider == "local":
         model_name = final_model or "paraphrase-multilingual-MiniLM-L12-v2"
@@ -162,15 +162,15 @@ def get_embedder(
     if final_provider in ("openai", "openai-compat"):
         final_api_key = (
             api_key
-            or yaml_cfg.get("api_key")
             or os.environ.get("ANCHOR_EMBEDDING_API_KEY")
+            or yaml_cfg.get("api_key")
         )
         if not final_api_key:
             log.warning(
-                "ANCHOR_EMBEDDING_API_KEY not set. Embedding features will be unavailable until configured via Web UI."
+                "ANCHOR_EMBEDDING_API_KEY not set. Embedding features will be unavailable until configured."
             )
             return None
-        final_endpoint = endpoint or yaml_cfg.get("endpoint") or os.environ.get("ANCHOR_EMBEDDING_ENDPOINT")
+        final_endpoint = endpoint or os.environ.get("ANCHOR_EMBEDDING_ENDPOINT") or yaml_cfg.get("endpoint")
         model_name = final_model or "text-embedding-3-small"
         return OpenAIEmbedder(
             model=model_name,
