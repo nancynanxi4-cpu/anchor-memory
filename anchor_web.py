@@ -489,8 +489,25 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
     def test_llm_config():
         import json as _json
         try:
-            from anchor_llm import get_default_llm, ConfigError
-            llm = get_default_llm()
+            from anchor_llm import _build_llm, _default_model, ConfigError
+            data = request.get_json(force=True)
+            provider = data.get("provider", "").strip()
+            model = data.get("model", "").strip()
+            api_key = data.get("api_key", "").strip()
+            endpoint = data.get("endpoint", "").strip()
+            if not provider:
+                return jsonify({"ok": False, "error": "Provider 不能为空"}), 400
+            if not model:
+                model = _default_model(provider)
+            if not model:
+                return jsonify({"ok": False, "error": "Model 不能为空"}), 400
+            if not api_key:
+                api_key = os.environ.get("ANCHOR_LLM_API_KEY", "")
+            if not endpoint:
+                endpoint = os.environ.get("ANCHOR_LLM_ENDPOINT", "")
+            if not api_key:
+                return jsonify({"ok": False, "error": "API Key 不能为空"}), 400
+            llm = _build_llm(provider, model, api_key=api_key, endpoint=endpoint or None)
             resp = llm.call(system="", user="Say OK", max_tokens=10)
             return jsonify({"ok": True, "provider": llm.provider, "model": llm.model, "response": resp.text[:50]})
         except Exception as e:
@@ -595,11 +612,20 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
     @login_required
     def test_embedding_config():
         try:
-            vec = mem._embedder.encode("测试文本")
+            from anchor_embedding import get_embedder
+            data = request.get_json(force=True)
+            provider = data.get("provider", "").strip()
+            model = data.get("model", "").strip()
+            api_key = data.get("api_key", "").strip()
+            endpoint = data.get("endpoint", "").strip()
+            if not provider or not model:
+                return jsonify({"ok": False, "error": "Provider 和 Model 不能为空"}), 400
+            emb = get_embedder(provider=provider, model=model, api_key=api_key or None, endpoint=endpoint or None)
+            vec = emb.encode("测试文本")
             dim = len(vec)
             return jsonify({
                 "ok": True,
-                "provider": mem._embedder.provider,
+                "provider": emb.provider,
                 "dimension": dim,
                 "sample": vec[:5],
             })

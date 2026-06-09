@@ -636,7 +636,14 @@ async function testLLMConfig() {
   const btn = document.getElementById('btn-test-llm');
   btn.disabled = true; btn.textContent = '测试中...';
   try {
-    const r = await api('/api/llm-config/test', { method: 'POST' });
+    const data = {
+      provider: document.getElementById('s-provider').value,
+      model: document.getElementById('s-model').value.trim(),
+      api_key: document.getElementById('s-apikey').value.trim(),
+      endpoint: document.getElementById('s-endpoint').value.trim(),
+    };
+    if (!data.model) { toast('Model 不能为空', 'error'); return; }
+    const r = await api('/api/llm-config/test', { method: 'POST', body: data });
     toast(`连接成功: ${r.provider}/${r.model} → "${r.response}"`);
   } catch(e) {}
   btn.disabled = false; btn.textContent = '测试连接';
@@ -706,7 +713,16 @@ async function testEmbeddingConfig() {
   const btn = document.getElementById('btn-test-emb');
   btn.disabled = true; btn.textContent = '测试中...';
   try {
-    const r = await api('/api/embedding-config/test', { method: 'POST' });
+    const provider = document.getElementById('emb-provider').value;
+    const model = document.getElementById('emb-model').value.trim();
+    if (!model) { toast('Model 不能为空', 'error'); return; }
+    const data = {
+      provider,
+      model,
+      api_key: document.getElementById('emb-apikey').value.trim(),
+      endpoint: document.getElementById('emb-endpoint').value.trim(),
+    };
+    const r = await api('/api/embedding-config/test', { method: 'POST', body: data });
     toast(`测试成功: provider=${r.provider}, 维度=${r.dimension}, 样本=[${r.sample.map(v=>v.toFixed(4)).join(',')}...]`);
   } catch(e) {}
   btn.disabled = false; btn.textContent = '测试';
