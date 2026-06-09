@@ -206,7 +206,7 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
 
         if "text" in data and data["text"].strip():
             new_text = data["text"].strip()
-            embedding = mem._embedder.encode(new_text).tolist()
+            embedding = mem._embedder.encode(new_text)
             meta = {
                 "memory_id": memory_id,
                 "timestamp": row.get("timestamp", datetime.utcnow().isoformat()),

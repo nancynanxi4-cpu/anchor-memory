@@ -28,20 +28,10 @@ class Embedder:
     dimension: int = 0
 
     def encode(self, text: str) -> list[float]:
-        raise NotImplementedError
-
-    def encode_batch(self, texts: list[str]) -> list[list[float]]:
-        return [self.encode(t) for t in texts]
-
-
-class LocalEmbedder(Embedder):
-    """Local sentence-transformers embedder."""
-
-    provider = "local"
-
-    def __init__(self, model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"):
         from sentence_transformers import SentenceTransformer
         self._model = SentenceTransformer(model_name)
+        result = self._model.encode(text)
+        return result.tolist() if hasattr(result, 'tolist') else list(result)
         self.model_name = model_name
         test = self._model.encode(["test"])
         self.dimension = len(test[0])

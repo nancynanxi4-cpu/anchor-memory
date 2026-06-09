@@ -104,7 +104,7 @@ class AnchorMemory:
         text = str(text).strip() if text is not None else ""
         if not text:
             raise ValueError("Memory text cannot be empty")
-        embedding = self._embedder.encode(text).tolist()
+        embedding = self._embedder.encode(text)
         meta = {
             "memory_id": memory_id,
             "timestamp": datetime.utcnow().isoformat(),
@@ -193,7 +193,7 @@ class AnchorMemory:
         Returns:
             List of memory dicts with memory_id, timestamp, tag, snippet, score.
         """
-        embedding = self._embedder.encode(query).tolist()
+        embedding = self._embedder.encode(query)
 
         where = {"tag": tag} if tag else None
         count = self._collection.count()
@@ -417,7 +417,7 @@ class AnchorMemory:
 
         # Step 2: Embedding match for better coverage
         if self._collection.count() > 0:
-            embedding = self._embedder.encode(conversation_text).tolist()
+            embedding = self._embedder.encode(conversation_text)
             results = self._collection.query(
                 query_embeddings=[embedding],
                 n_results=min(top_n, self._collection.count()),
