@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY *.py .
 COPY web/ web/
 COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
+RUN sed -i 's/\r$//' entrypoint.sh && chmod +x entrypoint.sh
 
 RUN mkdir -p /app/anchor_data
 
