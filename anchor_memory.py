@@ -477,7 +477,7 @@ class AnchorMemory:
         results = {}
 
         # 1. Mark internalized (stale but emotionally significant)
-        results["newly_internalized"] = self.db.mark_internalized(idle_days=30, emotion_threshold=0.6)
+        results["newly_internalized"] = self.db.mark_internalized(idle_days=30, emotion_threshold=0.8)
 
         # 2. Decay short-tier memories (skips internalized)
         results["decayed_memories"] = self.db.decay_short(days=short_decay_days)

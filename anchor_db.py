@@ -381,14 +381,20 @@ class AnchorDB:
             conn.commit()
         return cursor.rowcount
 
-    def mark_internalized(self, idle_days: int = 30, emotion_threshold: float = 0.6) -> int:
-        """Mark stale but emotionally significant memories as internalized (not deleted)."""
+    def mark_internalized(self, idle_days: int = 30, emotion_threshold: float = 0.8) -> int:
+        """Mark stale but emotionally significant memories as internalized (not deleted).
+
+        Targets memories that have NEVER been referenced (``usage_count = 0``),
+        were created at least ``idle_days`` ago, and carry a strong emotional
+        weight (``emotion_score >= emotion_threshold``). Core-tier and already
+        internalized memories are skipped.
+        """
         cutoff = (datetime.utcnow() - timedelta(days=idle_days)).isoformat()
         self._ensure_internalized_column()
         with self._conn() as conn:
             cursor = conn.execute(
                 "UPDATE memories SET internalized = 1, tier = 'long' "
-                "WHERE (last_used IS NULL OR last_used < ?) "
+                "WHERE usage_count = 0 AND timestamp < ? "
                 "AND emotion_score >= ? AND tier != 'core' AND internalized = 0",
                 (cutoff, emotion_threshold),
             )
