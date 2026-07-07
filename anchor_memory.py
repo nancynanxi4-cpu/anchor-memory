@@ -63,6 +63,7 @@ class AnchorMemory:
         # over-connection issues (median degree 110, max 596 on a 1k-node graph).
         # Set True to opt-in. Requires concept_link.py and an Anthropic API key.
         self._eager_link = False
+        self._sync_index(re_embed_zombies=True)
 
     def reload(self):
         """Re-create ChromaDB client to pick up external writes."""
@@ -210,16 +211,23 @@ class AnchorMemory:
             where=where,
         )
 
-        for doc, meta, dist in zip(
+        # Defensive: filter out ghost records (in ChromaDB but not in SQLite)
+        raw = list(zip(
             results["documents"][0],
             results["metadatas"][0],
             results["distances"][0],
-        ):
+        ))
+        all_mids = [m.get("memory_id", "") for _, m, _ in raw if m and m.get("memory_id")]
+        valid_mids = self.db.batch_exists(all_mids) if all_mids else set()
+
+        for doc, meta, dist in raw:
             if dist > 0.8:
                 continue
             if meta is None:
                 continue
             mid = meta.get("memory_id", "unknown")
+            if mid not in valid_mids:
+                continue
             citation_boost = min(self.db.get_citation_count(mid) * 0.02, 0.15)
             emotion_boost = self.db.get_emotion_score(mid) * 0.1
             boost = citation_boost + emotion_boost
@@ -423,9 +431,16 @@ class AnchorMemory:
                 n_results=min(top_n, self._collection.count()),
                 include=["metadatas", "distances"],
             )
+            # Defensive: filter ghost records (in ChromaDB but not in SQLite)
+            chroma_mids = [m.get("memory_id", "") for m, d
+                           in zip(results["metadatas"][0], results["distances"][0])
+                           if d < 0.6 and m and m.get("memory_id")]
+            valid = self.db.batch_exists(chroma_mids) if chroma_mids else set()
             for meta, dist in zip(results["metadatas"][0], results["distances"][0]):
-                if dist < 0.6:  # Stricter threshold for passive matching
-                    matched_ids.add(meta.get("memory_id", ""))
+                if dist < 0.6:
+                    mid = meta.get("memory_id", "")
+                    if mid and mid in valid:
+                        matched_ids.add(mid)
 
         matched_ids.discard("")
         matched_list = list(matched_ids)
@@ -450,13 +465,21 @@ class AnchorMemory:
         }
 
     def delete(self, memory_id: str) -> bool:
-        """Delete a memory and its edges."""
+        """Delete a memory and its edges.
+
+        SQLite first (graph integrity is primary), then ChromaDB (best effort).
+        If ChromaDB delete fails, the ghost will be caught by search's defensive
+        filter or cleaned by _sync_index during dream_pass.
+        """
         try:
-            self._collection.delete(ids=[memory_id])
             self.db.delete(memory_id)
-            return True
         except Exception:
             return False
+        try:
+            self._collection.delete(ids=[memory_id])
+        except Exception:
+            pass
+        return True
 
     def dream_pass(self, short_decay_days: int = 14,
                    edge_decay_factor: float = 0.9,
@@ -480,9 +503,14 @@ class AnchorMemory:
         results["newly_internalized"] = self.db.mark_internalized(idle_days=30, emotion_threshold=0.8)
 
         # 2. Decay short-tier memories (skips internalized)
-        results["decayed_memories"] = self.db.decay_short(days=short_decay_days)
-        if results["decayed_memories"]:
+        decayed_ids = self.db.decay_short(days=short_decay_days)
+        if decayed_ids:
+            try:
+                self._collection.delete(ids=decayed_ids)
+            except Exception:
+                pass
             self.reload()
+        results["decayed_memories"] = len(decayed_ids)
 
         # 3. Prune weak edges
         results["pruned_edges"] = self.db.decay_edges(
@@ -498,7 +526,8 @@ class AnchorMemory:
         if auto_discover:
             import random
             try:
-                all_mems = self.db.list_all(limit=20, offset=random.randint(0, max(0, self.count() - 20)))
+                db_total = self.db.count()
+                all_mems = self.db.list_all(limit=20, offset=random.randint(0, max(0, db_total - 20)))
                 auto_connected = 0
                 for m in all_mems[:5]:
                     neighbors = self.search(m["text"][:100], n_results=3, associate=False, hebbian=False)
@@ -526,6 +555,12 @@ class AnchorMemory:
             results["split_memories"] = split_count
         except Exception:
             results["split_memories"] = 0
+
+        # 9. Sync ChromaDB with SQLite (clean ghosts from any source)
+        try:
+            results["index_sync"] = self._sync_index(re_embed_zombies=False)
+        except Exception:
+            results["index_sync"] = {"error": "sync failed"}
 
         return results
 
@@ -570,12 +605,13 @@ class AnchorMemory:
 
         import json, uuid
         total_split = 0
-        offset = 0
 
-        while True:
-            batch = self.db.list_all(limit=batch_size, offset=offset)
-            if not batch:
-                break
+        # Load all memories upfront to avoid offset-shift pagination bugs
+        # when memories are deleted during iteration.
+        all_mems = self.db.list_all(limit=100000, offset=0)
+
+        for i in range(0, len(all_mems), batch_size):
+            batch = all_mems[i:i + batch_size]
 
             mem_lines = []
             for m in batch:
@@ -607,13 +643,74 @@ class AnchorMemory:
                             if sub_text:
                                 sub_id = f"split_{uuid.uuid4().hex[:8]}"
                                 self.store(sub_id, sub_text, tag=sub_tag, tier=sub_tier)
-                        self.delete(mid)
-                        total_split += 1
+                        if self.delete(mid):
+                            total_split += 1
             except (json.JSONDecodeError, Exception):
                 pass
-
-            offset += batch_size
 
         if total_split:
             self.reload()
         return total_split
+
+    def _sync_index(self, re_embed_zombies: bool = False) -> dict:
+        """Synchronize ChromaDB with SQLite.
+
+        - Ghosts (ChromaDB only): deleted from ChromaDB.
+        - Zombies (SQLite only): re-embedded into ChromaDB if *re_embed_zombies*.
+        - Orphan edges/comments/annotations: cleaned from SQLite.
+
+        Called by dream_pass (re_embed_zombies=False) and repair_index
+        (re_embed_zombies=True). Also called once on __init__.
+        """
+        chroma_ids = set(self._collection.get(include=[]).get("ids", []))
+        sqlite_ids = self.db.list_all_ids()
+
+        ghosts = chroma_ids - sqlite_ids
+        zombies = sqlite_ids - chroma_ids
+
+        if ghosts:
+            try:
+                self._collection.delete(ids=list(ghosts))
+            except Exception:
+                pass
+
+        re_embedded = 0
+        if re_embed_zombies and zombies:
+            for zid in zombies:
+                row = self.db.get(zid)
+                if row and row.get("text"):
+                    embedding = self._embedder.encode(row["text"])
+                    meta = {
+                        "memory_id": zid,
+                        "timestamp": row.get("timestamp", ""),
+                        "tag": row.get("tag", "general"),
+                    }
+                    self._collection.upsert(
+                        ids=[zid],
+                        embeddings=[embedding],
+                        documents=[row["text"]],
+                        metadatas=[meta],
+                    )
+                    re_embedded += 1
+
+        orphans = self.db._clean_orphans()
+
+        return {
+            "ghosts_cleaned": len(ghosts),
+            "zombies_re_embedded": re_embedded,
+            "orphan_edges": orphans["edges"],
+            "orphan_comments": orphans["comments"],
+            "orphan_annotations": orphans["annotations"],
+        }
+
+    def repair_index(self) -> dict:
+        """Full repair: clean ghosts, re-embed zombies, clean orphans.
+
+        Run once after deploying the sync fix, or anytime to force a full
+        reconciliation. For regular maintenance, dream_pass calls
+        _sync_index automatically.
+        """
+        self.reload()
+        result = self._sync_index(re_embed_zombies=True)
+        self.reload()
+        return result

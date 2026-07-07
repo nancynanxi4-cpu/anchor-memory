@@ -180,8 +180,9 @@ def create_mcp_server(
     @mcp.tool()
     def graph_stats() -> dict:
         """Get overview stats: total memories, edges, tag distribution, tier distribution, top connected nodes."""
-        total = mem.count()
-        all_mems = mem.db.list_all(limit=total)
+        db_count = mem.db.count()
+        index_count = mem.count()
+        all_mems = mem.db.list_all(limit=db_count)
         tags: dict[str, int] = {}
         tiers: dict[str, int] = {}
         for m in all_mems:
@@ -190,10 +191,17 @@ def create_mcp_server(
             tags[t] = tags.get(t, 0) + 1
             tiers[tr] = tiers.get(tr, 0) + 1
         return {
-            "total_memories": total,
+            "total_memories": db_count,
+            "index_count": index_count,
+            "index_synced": db_count == index_count,
             "tags": tags,
             "tiers": tiers,
         }
+
+    @mcp.tool()
+    def repair_index() -> dict:
+        """Clean up ghost/zombie records between ChromaDB and SQLite. Deletes ghost vectors (ChromaDB only), re-embeds zombie records (SQLite only), and cleans orphan edges/comments/annotations. Safe to run anytime — operations are idempotent."""
+        return mem.repair_index()
 
     @mcp.tool()
     def annotate_memory(memory_id: str, text: str) -> dict:

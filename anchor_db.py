@@ -254,21 +254,29 @@ class AnchorDB:
             ).fetchone()
         return dict(row) if row else None
 
+    def _delete_cascade(self, conn, memory_ids: list):
+        """Explicit cascade delete: edges, comments, annotations, then memories.
+
+        Belt-and-suspenders for Windows where PRAGMA foreign_keys = ON may be
+        silently inert, leaving ON DELETE CASCADE non-functional. No-op on
+        platforms where the cascade already fired.
+        """
+        if not memory_ids:
+            return
+        ph = ",".join("?" * len(memory_ids))
+        conn.execute(
+            f"DELETE FROM edges WHERE source_id IN ({ph}) OR target_id IN ({ph})",
+            memory_ids + memory_ids,
+        )
+        conn.execute(f"DELETE FROM comments WHERE memory_id IN ({ph})", memory_ids)
+        conn.execute(f"DELETE FROM annotations WHERE memory_id IN ({ph})", memory_ids)
+        conn.execute(f"DELETE FROM memories WHERE memory_id IN ({ph})", memory_ids)
+
     def delete(self, memory_id: str):
-        self.log_event(memory_id, "deleted")
         with self._conn() as conn:
-            # Application-level cascade: some SQLite builds (notably Windows
-            # default) silently fail to enforce PRAGMA foreign_keys = ON, leaving
-            # ON DELETE CASCADE inert and raising FK constraint violations later
-            # when consolidate/dream-pass runs. Belt-and-suspenders: delete edges
-            # explicitly before the memory itself. No-op on platforms where the
-            # cascade fired.
-            conn.execute(
-                "DELETE FROM edges WHERE source_id = ? OR target_id = ?",
-                (memory_id, memory_id),
-            )
-            conn.execute("DELETE FROM memories WHERE memory_id = ?", (memory_id,))
+            self._delete_cascade(conn, [memory_id])
             conn.commit()
+        self.log_event(memory_id, "deleted")
 
     def list_all(self, limit: int = 50, offset: int = 0) -> list:
         with self._conn() as conn:
@@ -278,6 +286,48 @@ class AnchorDB:
                 (limit, offset)
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def list_all_ids(self) -> set:
+        """Return a set of all memory_ids in the database."""
+        with self._conn() as conn:
+            rows = conn.execute("SELECT memory_id FROM memories").fetchall()
+        return {r["memory_id"] for r in rows}
+
+    def batch_exists(self, memory_ids: list) -> set:
+        """Batch-check which memory_ids exist in SQLite. Returns set of existing IDs."""
+        if not memory_ids:
+            return set()
+        with self._conn() as conn:
+            ph = ",".join("?" * len(memory_ids))
+            rows = conn.execute(
+                f"SELECT memory_id FROM memories WHERE memory_id IN ({ph})",
+                memory_ids,
+            ).fetchall()
+        return {r["memory_id"] for r in rows}
+
+    def count(self) -> int:
+        """SQLite memory count (excludes ChromaDB-only ghosts)."""
+        with self._conn() as conn:
+            return conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+
+    def _clean_orphans(self) -> dict:
+        """Delete orphan edges/comments/annotations pointing to non-existent memories."""
+        with self._conn() as conn:
+            edges = conn.execute("""
+                DELETE FROM edges WHERE
+                NOT EXISTS (SELECT 1 FROM memories m WHERE m.memory_id = edges.source_id)
+                OR NOT EXISTS (SELECT 1 FROM memories m WHERE m.memory_id = edges.target_id)
+            """).rowcount
+            comments = conn.execute("""
+                DELETE FROM comments WHERE
+                NOT EXISTS (SELECT 1 FROM memories m WHERE m.memory_id = comments.memory_id)
+            """).rowcount
+            annotations = conn.execute("""
+                DELETE FROM annotations WHERE
+                NOT EXISTS (SELECT 1 FROM memories m WHERE m.memory_id = annotations.memory_id)
+            """).rowcount
+            conn.commit()
+        return {"edges": edges, "comments": comments, "annotations": annotations}
 
     def _tokenize_query(self, query: str) -> list:
         """Tokenize a search query for multi-keyword matching.
@@ -401,18 +451,25 @@ class AnchorDB:
             conn.commit()
         return cursor.rowcount
 
-    def decay_short(self, days: int = 14) -> int:
-        """Delete short-tier memories older than N days. Skips internalized."""
+    def decay_short(self, days: int = 14) -> list:
+        """Delete short-tier memories older than N days. Skips internalized.
+
+        Returns list of deleted memory_ids so the caller (AnchorMemory.dream_pass)
+        can remove the corresponding vectors from ChromaDB.
+        """
         cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
         self._ensure_internalized_column()
         with self._conn() as conn:
-            cursor = conn.execute(
-                "DELETE FROM memories WHERE tier = 'short' AND timestamp < ? "
+            rows = conn.execute(
+                "SELECT memory_id FROM memories WHERE tier = 'short' AND timestamp < ? "
                 "AND (internalized IS NULL OR internalized = 0)",
                 (cutoff,)
-            )
-            conn.commit()
-        return cursor.rowcount
+            ).fetchall()
+            deleted_ids = [r["memory_id"] for r in rows]
+            if deleted_ids:
+                self._delete_cascade(conn, deleted_ids)
+                conn.commit()
+        return deleted_ids
 
     # ── Citation tracking ──
 

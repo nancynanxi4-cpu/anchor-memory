@@ -48,8 +48,14 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
 
     @app.route("/health", methods=["GET"])
     def health():
-        total = mem.count()
-        return jsonify({"status": "ok", "total_memories": total})
+        db_count = mem.db.count()
+        index_count = mem.count()
+        return jsonify({
+            "status": "ok",
+            "total_memories": db_count,
+            "index_count": index_count,
+            "synced": db_count == index_count,
+        })
 
     @app.route("/api/login", methods=["POST"])
     def login():
@@ -329,7 +335,7 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
     @app.route("/api/stats", methods=["GET"])
     @login_required
     def stats():
-        total = mem.count()
+        total = mem.db.count()
         conn = mem.db._conn()
         tags = {}
         tiers = {}
@@ -419,6 +425,13 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
         stats = mem.dream_pass()
         log.info("manual dream_pass: %s", stats)
         return jsonify(stats)
+
+    @app.route("/api/repair", methods=["POST"])
+    @login_required
+    def repair():
+        result = mem.repair_index()
+        log.info("manual repair_index: %s", result)
+        return jsonify(result)
 
     return app
 
