@@ -329,6 +329,18 @@ class AnchorDB:
             conn.commit()
         return {"edges": edges, "comments": comments, "annotations": annotations}
 
+    def checkpoint(self):
+        """Force WAL checkpoint and truncate the WAL file to zero.
+
+        SQLite's auto-checkpoint (PASSIVE mode) often can't complete while the
+        service has active readers, causing the WAL file to grow unboundedly.
+        Call this after batch write operations (dream_pass, repair_index) to
+        flush all WAL data into the main database file.
+        """
+        with self._conn() as conn:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            conn.commit()
+
     def _tokenize_query(self, query: str) -> list:
         """Tokenize a search query for multi-keyword matching.
 

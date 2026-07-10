@@ -64,6 +64,7 @@ class AnchorMemory:
         # Set True to opt-in. Requires concept_link.py and an Anthropic API key.
         self._eager_link = False
         self._sync_index(re_embed_zombies=True)
+        self.db.checkpoint()
 
     def reload(self):
         """Re-create ChromaDB client to pick up external writes."""
@@ -562,6 +563,12 @@ class AnchorMemory:
         except Exception:
             results["index_sync"] = {"error": "sync failed"}
 
+        # 10. Checkpoint WAL to main DB file
+        try:
+            self.db.checkpoint()
+        except Exception:
+            pass
+
         return results
 
     def split_bundled(self, batch_size: int = 50, dry_run: bool = False,
@@ -712,5 +719,6 @@ class AnchorMemory:
         """
         self.reload()
         result = self._sync_index(re_embed_zombies=True)
+        self.db.checkpoint()
         self.reload()
         return result
