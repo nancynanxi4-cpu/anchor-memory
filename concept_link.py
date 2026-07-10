@@ -358,6 +358,7 @@ def run(db_path: str, scope: str = "mix", single_id: str = None,
     new_edges = create_edges(db, confirmed)
     print(f"[ConceptLink] New edges: {new_edges}, "
           f"strengthened: {len(confirmed) - new_edges}")
+    db.checkpoint()
     return len(confirmed)
 
 

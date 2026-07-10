@@ -170,6 +170,7 @@ def run(db_path: str):
     print(f"[Consolidate] {new_edges} new edges, {len(confirmed) - new_edges} strengthened")
 
     db.decay_edges(min_weight=MIN_EDGE_WEIGHT, decay_factor=DECAY_FACTOR)
+    db.checkpoint()
     return len(confirmed)
 
 

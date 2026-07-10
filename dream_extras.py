@@ -82,10 +82,22 @@ DEDUP_SYSTEM = (
 
 
 def _all_embeddings(mem):
-    """Pull all memory ids + embeddings + metadata + docs from Anchor."""
+    """Pull all memory ids + embeddings + metadata + docs from Anchor.
+
+    Filters out ghost records (in ChromaDB but not in SQLite) to prevent
+    them from polluting dedup/fact-check analysis and causing data loss.
+    """
     col = mem._collection
     data = col.get(include=["embeddings", "metadatas", "documents"])
-    return data["ids"], data["embeddings"], data["documents"], data["metadatas"]
+    sqlite_ids = mem.db.list_all_ids()
+    ids, embs, docs, metas = [], [], [], []
+    for i, mid in enumerate(data["ids"]):
+        if mid in sqlite_ids:
+            ids.append(mid)
+            embs.append(data["embeddings"][i])
+            docs.append(data["documents"][i])
+            metas.append(data["metadatas"][i])
+    return ids, embs, docs, metas
 
 
 def _high_similarity_pairs(ids, embs, threshold=0.92, max_pairs=150):
@@ -201,7 +213,10 @@ def run_global_dedup(mem, threshold: float = 0.92, max_pairs: int = 100,
                 try:
                     mem.store(keep_id, merged_text)
                     if remove_id != keep_id and hasattr(mem, "delete"):
-                        mem.delete(remove_id)
+                        if not mem.delete(remove_id):
+                            print(f"[dream_extras]   delete failed for {remove_id}, merge incomplete")
+                            skipped += 1
+                            continue
                     merged += 1
                 except Exception as e:
                     print(f"[dream_extras]   merge error {keep_id}/{remove_id}: {e}")
@@ -214,6 +229,10 @@ def run_global_dedup(mem, threshold: float = 0.92, max_pairs: int = 100,
     with open(out, "w") as f:
         json.dump(decisions_log, f, ensure_ascii=False, indent=2)
     print(f"[dream_extras] dedup done. merged={merged} kept={kept} skipped={skipped}. log: {out}")
+    try:
+        mem.db.checkpoint()
+    except Exception:
+        pass
     return {"scanned": len(ids), "candidates": len(candidates),
             "merged": merged, "kept_both": kept, "skipped": skipped,
             "log_path": out}

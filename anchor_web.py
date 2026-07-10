@@ -412,6 +412,7 @@ def create_app(db_path: str, secret_key: str = None) -> Flask:
 
         log.info("auto_consolidate: candidates=%d confirmed=%d new=%d strengthened=%d",
                  len(candidates), len(confirmed), new_edges, strengthened)
+        mem.db.checkpoint()
         return jsonify({
             "candidates": len(candidates),
             "confirmed": len(confirmed),

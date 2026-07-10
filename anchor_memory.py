@@ -132,12 +132,15 @@ class AnchorMemory:
                     include=["metadatas"],
                 )
                 if neighbors and neighbors["ids"] and neighbors["ids"][0]:
+                    neighbor_nids = [
+                        m.get("memory_id", "") for m in neighbors["metadatas"][0]
+                        if m and m.get("memory_id") and m.get("memory_id") != memory_id
+                    ]
+                    valid_nids = self.db.batch_exists(neighbor_nids)
                     neighbor_scores = []
-                    for nmeta in neighbors["metadatas"][0]:
-                        nid = nmeta.get("memory_id", "")
-                        if nid and nid != memory_id:
-                            ns = self.db.get_emotion_score(nid)
-                            neighbor_scores.append(ns)
+                    for nid in neighbor_nids:
+                        if nid in valid_nids:
+                            neighbor_scores.append(self.db.get_emotion_score(nid))
                     if neighbor_scores:
                         avg = sum(neighbor_scores) / len(neighbor_scores)
                         variance = sum((s - avg) ** 2 for s in neighbor_scores) / len(neighbor_scores)
