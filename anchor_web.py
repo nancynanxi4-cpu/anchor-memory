@@ -24,9 +24,14 @@ WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 log = logging.getLogger("anchor_web")
 
 
-def create_app(db_path: str, secret_key: str = None) -> Flask:
+def create_app(
+    db_path: str,
+    secret_key: str | None = None,
+    mem: AnchorMemory | None = None,
+) -> Flask:
     os.makedirs(db_path, exist_ok=True)
-    mem = AnchorMemory(db_path=db_path)
+    if mem is None:
+        mem = AnchorMemory(db_path=db_path)
 
     app = Flask(__name__, static_folder=None)
     app.secret_key = secret_key or os.urandom(24).hex()
